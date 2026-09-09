@@ -1,0 +1,87 @@
+/* ============================================================
+ * 63-dashboard.js — 儀表板：一條龍進度 + 課程概況 + 收生統計
+ * ============================================================ */
+
+regPage('dashboard', function (root) {
+  const st = Store.state;
+  if (!st) { root.appendChild(h('div', { class: 'card' }, '載入中…')); return; }
+  const info = st.info;
+
+  /* ── 一條龍進度 checklist ── */
+  const steps = [
+    { ok: !!(info.name && (info.intake || info.intake === 0) && (info.fee || info.fee === 0)), label: '① 開班文件 — 預算基本資料', route: 'setup' },
+    { ok: !!(info.quota && st.sessions.length > 0), label: '② 開班文件 — 名額・節次・職員', route: 'setup' },
+    { ok: !!(st.noticeEdits.eligibility && st.noticeEdits.feeNote && st.noticeEdits.uniform), label: '③ 通告 — 補參加資格・費用說明・服裝', route: 'notice' },
+    { ok: !!(info.deadline && info.publish), label: '④ 截止報名／公佈取錄日', route: 'setup' },
+    { ok: st.stats.approved > 0, label: '⑤ 收生 — 確認取錄（' + st.stats.approved + '/' + (info.quota || '?') + '）', route: 'intake' },
+    { ok: st.stats.approved > 0 && st.regs.filter(r => r.status === 'approved').every(r => r.group), label: '⑥ 學員分組', route: 'roster' },
+  ];
+  const done = steps.filter(s => s.ok).length;
+
+  const progress = h('div', { class: 'card' },
+    h('div', { class: 'card-title-row' },
+      h('div', { class: 'card-title' }, '🚀 開班一條龍進度'),
+      h('span', { class: 'badge-num' }, done + '/' + steps.length)),
+    h('div', { class: 'progress-track' }, h('div', { class: 'progress-fill', style: { width: Math.round(done / steps.length * 100) + '%' } })),
+    h('div', { class: 'steps' }, steps.map(s => h('button', {
+      class: 'step' + (s.ok ? ' ok' : ''),
+      onclick: () => nav(s.route),
+    }, h('span', { class: 'step-dot' }, s.ok ? '✓' : '○'), h('span', { class: 'step-label' }, s.label), h('span', { class: 'step-go' }, '›')))));
+
+  /* ── 課程資料 ── */
+  const kv = (k, v) => h('tr', null, h('td', null, k), h('td', { html: v === '' || v == null ? '<span class="dim">（未填）</span>' : esc(String(v)) }));
+  const courseCard = h('div', { class: 'card' },
+    h('div', { class: 'card-title' }, '🎓 課程資料'),
+    h('table', { class: 'kv-table' },
+      kv('名稱', info.name),
+      kv('屆別', info.edition ? info.edition + ' 屆' : ''),
+      kv('支部', info.section),
+      kv('專章', info.badge || info.customName),
+      kv('形式', [info.type1, info.type2].filter(Boolean).join('・')),
+      kv('名額', info.quota ? info.quota + ' 人' : ''),
+      kv('收費', info.fee !== '' ? '$' + info.fee : ''),
+      kv('截止報名', info.deadline ? fmtCNDate(info.deadline) : ''),
+      kv('公佈取錄', info.publish ? fmtCNDate(info.publish) : ''),
+      kv('班職員', info.staff !== '' ? info.staff + ' 人（常駐 ' + (info.resident || '—') + '）' : '')),
+    h('div', { class: 'btn-row' }, h('button', { class: 'btn btn-sm', onclick: () => nav('setup') }, '📝 修改開班文件')));
+
+  /* ── 收生統計 ── */
+  const s = st.stats;
+  const statChip = (n, label, cls) => h('div', { class: 'stat ' + (cls || '') }, h('div', { class: 'stat-n' }, String(n)), h('div', { class: 'stat-l' }, label));
+  const pendingList = st.regs.filter(r => r.status === 'pending').slice(-3).reverse();
+  const intakeCard = h('div', { class: 'card' },
+    h('div', { class: 'card-title' }, '✅ 收生狀況'),
+    h('div', { class: 'stat-row' },
+      statChip(s.total, '總報名'), statChip(s.pending, '待批', 'amber'),
+      statChip(s.approved, '已取錄', 'green'), statChip(s.rejected, '拒絕', 'red'), statChip(s.cancelled, '取消', 'gray')),
+    s.quota ? h('div', { class: 'quota-line' },
+      h('div', { class: 'progress-track' }, h('div', { class: 'progress-fill' + (s.approved > s.quota ? ' over' : ''), style: { width: Math.min(100, Math.round(s.approved / s.quota * 100)) + '%' } })),
+      h('div', { class: 'quota-text' }, '名額 ' + s.approved + '/' + s.quota + (s.approved > s.quota ? ' ⚠️ 超收' : '（剩 ' + s.seatsLeft + '）'))) : null,
+    pendingList.length ? h('div', { class: 'mini-list' },
+      h('div', { class: 'row-sub', style: { marginBottom: '4px' } }, '最新待批：'),
+      pendingList.map(r => h('div', { class: 'row-item compact' },
+        h('div', { class: 'row-title' }, esc(r.nameZh) + '・' + esc(r['旅團'])),
+        h('button', { class: 'btn btn-sm btn-primary', onclick: () => nav('intake') }, '去處理')))) : h('div', { class: 'row-sub' }, s.pending ? '' : '冇待批報名 🎉'),
+    h('div', { class: 'btn-row' }, h('button', { class: 'btn btn-sm btn-primary', onclick: () => nav('intake') }, '➡ 去收生確認')));
+
+  /* ── 節次 + 職員 ── */
+  const sessCard = h('div', { class: 'card' },
+    h('div', { class: 'card-title' }, '📅 節次（' + st.sessions.length + '）'),
+    st.sessions.length
+      ? h('div', { class: 'mini-list' }, st.sessions.map(x => h('div', { class: 'sess-item' },
+          h('span', { class: 'sess-date' }, fmtShortDate(x.date)),
+          h('span', { class: 'sess-time' }, esc(x.time || '—')),
+          h('span', { class: 'sess-venue' }, esc(x.venue || '—')),
+          x.onNotice ? h('span', { class: 'tag tag-blue' }, '上通告') : null)))
+      : h('div', { class: 'row-sub' }, '未填節次（開班文件 → Input02）'));
+
+  const leader = st.leader;
+  const staffCard = h('div', { class: 'card' },
+    h('div', { class: 'card-title' }, '👥 班職員（' + st.staff.length + '）'),
+    leader ? h('div', { class: 'leader-line' }, '🏅 班領導人：' + esc(leader.name) + esc(leader.title) + (leader.qual ? '（' + esc(leader.qual) + '）' : '') + (leader.phone ? '・' + esc(leader.phone) : '')) : h('div', { class: 'row-sub' }, '未填班領導人'),
+    h('div', { class: 'mini-list' }, st.staff.filter(x => x.name && x.role !== '班領導人').slice(0, 8).map(x => h('div', { class: 'row-sub' }, esc(x.role) + '・' + esc(x.name)))));
+
+  root.appendChild(progress);
+  root.appendChild(h('div', { class: 'grid-2' }, courseCard, h('div', null, intakeCard)));
+  root.appendChild(h('div', { class: 'grid-2' }, sessCard, staffCard));
+});

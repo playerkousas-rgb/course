@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="zh-Hant-HK">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#00695c">
+<meta name="description" content="訓練班管理系統 — 開班文件、通告、收生、點名、收支一條龍（純前端 × Google Sheet）">
+<title>訓練班管理系統</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎓</text></svg>">
+<link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+<div id="app"></div>
+<!-- 載入順序：config → api/mock → store → parse → sync → ui → pages → boot -->
+<script src="js/00-config.js"></script>
+<script src="js/10-api.js"></script>
+<script src="js/15-mock.js"></script>
+<script src="js/20-store.js"></script>
+<script src="js/30-parse.js"></script>
+<script src="js/40-sync.js"></script>
+<script src="js/50-ui.js"></script>
+<script src="js/63-dashboard.js"></script>
+<script src="js/60-setup.js"></script>
+<script src="js/61-notice.js"></script>
+<script src="js/62-intake.js"></script>
+<script src="js/64-roster.js"></script>
+<script src="js/90-bootstrap.js"></script>
+</body>
+</html>
