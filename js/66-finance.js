@@ -35,66 +35,6 @@ function financeSummary(st) {
   return out;
 }
 
-/* ── Input01 預算 → 每大類（照模版公式等效計；職員/學員人數取 Input01 B11/B13） ── */
-function budgetSummary(st) {
-  const out = { sections: [], total: 0 };
-  const g = st && st.raw && st.raw.input01;
-  if (!Array.isArray(g)) return out;
-  const num = (r, c) => {
-    const v = shCell(g, r, c);
-    const n = Number(String(v == null ? '' : v).replace(/[$,]/g, ''));
-    return Number.isFinite(n) ? n : 0;
-  };
-  const staffN = Number(st.info.staff) || 0;
-  const intakeN = Number(st.info.intake) || 0;
-  const sec = (key, label, mapTo, budget) => { out.sections.push({ key: key, label: label, mapTo: mapTo, budget: Math.round(budget * 100) / 100 }); out.total += budget; };
-
-  let v = 0;
-  IN1_MEALS.rows.forEach((r) => {
-    const per = num(r, IN1_MEALS.breakfast) + num(r, IN1_MEALS.lunch) + num(r, IN1_MEALS.dinner) + num(r, IN1_MEALS.snack) + num(r, IN1_MEALS.water);
-    if (!per) return;
-    const who = String(shCell(g, r, IN1_MEALS.who) || '');
-    v += per * (who.indexOf('職員') >= 0 ? staffN : intakeN);
-  });
-  sec('meal', '1. 膳食', ['B', 'C', 'D'], v);
-
-  v = 0;
-  IN1_RENT.rows.forEach((r) => { const q = num(r, IN1_RENT.qty), p = num(r, IN1_RENT.price); if (q && p) v += q * p; });
-  IN1_RENT_EXTRA.rows.forEach((r) => { if (!num(r, IN1_RENT.qty)) v += num(r, IN1_RENT_EXTRA.amount); });
-  [IN1_CAMP, IN1_LODGE].forEach((m) => m.rows.forEach((r) => {
-    const n2 = num(r, m.nights), pp = num(r, m.people), pr = num(r, m.price);
-    if (n2 && pp && pr) v += n2 * pp * pr;
-  }));
-  sec('rent', '2. 租金（場租＋露營＋住宿）', ['E'], v);
-
-  v = 0;
-  IN1_TRANSPORT.forEach((t) => t.rows.forEach((r) => { v += num(r, IN1_TRANSPORT_COLS.budget); }));
-  sec('transport', '3. 交通', ['F'], v);
-
-  v = 0;
-  IN1_HANDOUTS.rows.forEach((r) => { v += num(r, IN1_HANDOUTS.qty) * num(r, IN1_HANDOUTS.price); });
-  sec('handouts', '4. 講義及快勞', ['H'], v);
-
-  v = 0;
-  IN1_PROGRAMME.rows.forEach((r) => { v += num(r, IN1_PROGRAMME.qty) * num(r, IN1_PROGRAMME.price); });
-  sec('programme', '5. 節目', ['I'], v);
-
-  v = 0;
-  IN1_ADMIN.rows.forEach((r) => { v += num(r, IN1_ADMIN.qty) * num(r, IN1_ADMIN.price); });
-  sec('admin', '6. 行政', ['G'], v);
-
-  v = 0;
-  IN1_SOUVENIR.rows.forEach((r) => { v += num(r, IN1_SOUVENIR.qty) * num(r, IN1_SOUVENIR.price); });
-  sec('souvenir', '7. 紀念品', ['I'], v);
-
-  v = 0;
-  IN1_MISC.rows.forEach((r) => { v += num(r, IN1_MISC.amount); });
-  sec('misc', '8. 其他', ['I'], v);
-
-  out.total = Math.round(out.total * 100) / 100;
-  return out;
-}
-
 let _finBusy = false;
 
 /* 新增支出（addExpenseRow：append-only，唔檢查 rev，唔會撞其他職員） */

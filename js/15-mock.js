@@ -191,6 +191,7 @@ function mockSeedState() {
     ['FPS 戶口名稱', 'SCOUT ASSOCIATION OF HONG KONG - SHAU KEI WAN DISTRICT'],
     ['區會網址', 'www.skwscout.org.hk'],
     ['區會批准', '✔'],
+    ['訓練班電郵', 'photo.course@skwscout.org.hk'],
   ];
 
   const st = {
@@ -279,6 +280,7 @@ function mockBlankState(nm, b) {
     ['FPS 戶口名稱', 'SCOUT ASSOCIATION OF HONG KONG - SHAU KEI WAN DISTRICT'],
     ['區會網址', 'www.skwscout.org.hk'],
     ['區會批准', ''],
+    ['訓練班電郵', ''],
   ];
   const st = { rev: 0, savedAt: '', by: '', sheets: {} };
   st.sheets[TAB.IN1] = IN1; st.sheets[TAB.IN2] = IN2;
@@ -357,6 +359,28 @@ function mockDumpIn2(state) {
   return out;
 }
 
+/* 整包 dump（getCourseSheetRaw／getCourseSummary 共用） */
+function mockDump(state) {
+  return {
+    input01: state.sheets[TAB.IN1], input02: mockDumpIn2(state),
+    input03: state.sheets[TAB.IN3], input04: state.sheets[TAB.IN4],
+    resp: mockDumpResp(state),
+    paramsWX: Array.isArray(state.sheets[TAB.PARAM]) && state.sheets[TAB.PARAM].length
+      ? state.sheets[TAB.PARAM]
+      : [
+          ['區會常數（唔好改名）', ''],
+          ['成員系統報名網址', 'https://member-portal-sigma-swart.vercel.app/training'],
+          ['FPS 識別碼', '102866183'],
+          ['FPS 戶口名稱', 'SCOUT ASSOCIATION OF HONG KONG - SHAU KEI WAN DISTRICT'],
+          ['區會網址', 'www.skwscout.org.hk'],
+        ],
+    notice: state.sheets[TAB.NOTICE],
+    attend: state.sheets[TAB.ATTEND] || [],
+    accept: [], finance: [], completion: state.sheets[TAB.COMPLETE], cert: state.sheets[TAB.CERT], subsidy: [],
+    pulledAt: new Date().toISOString(),
+    rev: state.rev, revSavedAt: state.savedAt, revBy: state.by,
+  };
+}
 function mockOk(d) { return { ok: true, data: d }; }
 function mockErr(m) { return { ok: false, error: m }; }
 function mockAuth(b) {
@@ -432,24 +456,34 @@ const MockAPI = {
     if (action === 'setCompletionRow') return mockSetCompletionRow(state, b);
     if (action === 'setCertRow') return mockSetCertRow(state, b);
     if (action === 'getCourseSheetRaw') {
+      return mockOk(mockDump(state));
+    }
+    if (action === 'getCourseSummary') {
+      /* 區管理系統批核用:一個 call 攞齊最重要嘅資料(管理層只睇呢個就批到) */
+      const st2 = parseAll(mockDump(state));
+      const bud = budgetSummary(st2);
+      const nCell = (r, c) => String(shCell(state.sheets[TAB.NOTICE], r, c) || '').trim();
       return mockOk({
-        input01: state.sheets[TAB.IN1], input02: mockDumpIn2(state),
-        input03: state.sheets[TAB.IN3], input04: state.sheets[TAB.IN4],
-        resp: mockDumpResp(state),
-        paramsWX: Array.isArray(state.sheets[TAB.PARAM]) && state.sheets[TAB.PARAM].length
-          ? state.sheets[TAB.PARAM]
-          : [
-              ['區會常數（唔好改名）', ''],
-              ['成員系統報名網址', 'https://member-portal-sigma-swart.vercel.app/training'],
-              ['FPS 識別碼', '102866183'],
-              ['FPS 戶口名稱', 'SCOUT ASSOCIATION OF HONG KONG - SHAU KEI WAN DISTRICT'],
-              ['區會網址', 'www.skwscout.org.hk'],
-            ],
-        notice: state.sheets[TAB.NOTICE],
-        attend: state.sheets[TAB.ATTEND] || [],
-        accept: [], finance: [], completion: state.sheets[TAB.COMPLETE], cert: state.sheets[TAB.CERT], subsidy: [],
-        pulledAt: new Date().toISOString(),
-        rev: state.rev, revSavedAt: state.savedAt, revBy: state.by,
+        courseName: st2.info.name, edition: st2.info.edition, section: st2.info.section,
+        badge: st2.info.badge, customName: st2.info.customName,
+        type1: st2.info.type1, type2: st2.info.type2,
+        intake: st2.info.intake, fee: st2.info.fee, quota: st2.info.quota,
+        staffCount: st2.staff.length, deadline: st2.info.deadline, publish: st2.info.publish,
+        sessions: st2.sessions.map((x) => ({ date: x.date, time: x.time, venue: x.venue, onNotice: !!x.onNotice })),
+        leader: st2.leader ? { name: st2.leader.name, title: st2.leader.title, phone: st2.leader.phone, email: st2.leader.email } : null,
+        staff: st2.staff.map((x) => ({ role: x.role, name: x.name, title: x.title })),
+        budget: { sections: bud.sections, total: bud.total },
+        notice: {
+          fileNo: nCell(NOTICE_EDIT.fileNo.r, NOTICE_EDIT.fileNo.c),
+          issueDate: nCell(NOTICE_EDIT.issueDate.r, NOTICE_EDIT.issueDate.c),
+          eligibility: st2.noticeEdits.eligibility || '',
+          feeNote: st2.noticeEdits.feeNote || '',
+          uniform: st2.noticeEdits.uniform || '',
+        },
+        courseEmail: st2.params.courseEmail || '',
+        approved: !!st2.params.approved,
+        regCount: st2.stats.total,
+        rev: state.rev, pulledAt: new Date().toISOString(),
       });
     }
     if (action === 'listRegs') {

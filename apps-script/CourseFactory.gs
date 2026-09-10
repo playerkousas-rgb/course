@@ -80,11 +80,13 @@ function createCourse(b) {
   sync.getRange('A5').setValue(apiKey);
   sync.hideSheet();
 
-  /* 2.5 參數分頁預留「區會批准」格（區管理層批核寫,CL 喺 APP 只讀;通告 URL 係區管理系統內部嘢,唔喺呢度） */
+  /* 2.5 參數分頁預留「區會批准」＋「訓練班電郵」格
+     （批准=區管理層批核寫,CL 喺 APP 只讀;電郵=管理層告知 CL 先填,通告查詢行用;
+      通告 URL 係區管理系統內部嘢,唔喺呢度） */
   const param = ss.getSheetByName('參數');
   if (param) {
     const last = param.getLastRow();
-    const labels = ['區會批准'];
+    const labels = ['區會批准', '訓練班電郵'];
     labels.forEach(function (t) {
       const found = param.createTextFinder(t).matchEntireCell(true).findNext();
       if (!found) param.getRange(last + 1, 1, 1, 2).setValues([[t, '']]);

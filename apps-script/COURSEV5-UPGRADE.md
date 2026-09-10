@@ -15,15 +15,18 @@
 | 版本識別 | `auth` 回應帶 `v:'5.0.0'`；前端亦可偵測「有冇 auth action」分辨新舊後端 |
 | `setPaymentCheck` action | 區管理系統核對區帳戶後 tick「表格回應」AS-AU（已核對收款/核對人/核對時間）；identity 定位、唔 bump rev、首次自動補表頭 |
 | STA 收表 | AV/AW 兩欄（已交表格正本✔/收表記錄）——班職員 APP 收表時經 `saveCourseBatch` 寫，唔使另外加 action |
+| `getCourseSummary` action | **區管理系統批核用**：一個 call 攞齊最重要嘅資料（課程資料・節次・職員・預算 8 大類・通告要點・訓練班電郵・批准狀態・報名數）——管理層只睇呢個就批到，減省行政時間（`Summary.gs`） |
+| 參數分頁新格 | 「訓練班電郵」（管理層告知 CL 先填；通告查詢行自動用佢）——CourseFactory 起新班已自動預留 |
 
 ## 安裝步驟（每班 GAS 專案，或改完模版之後全區生效）
 
-1. **加檔案**：GAS 專案左欄「＋」→ 新增 `Auth.gs` **同 `PaymentCheck.gs`** → 貼入本 repo `apps-script/` 對應檔全文
+1. **加檔案**：GAS 專案左欄「＋」→ 新增 `Auth.gs`・`PaymentCheck.gs` **同 `Summary.gs`** → 貼入本 repo `apps-script/` 對應檔全文
 2. **加路由**：喺 `Code.gs.course.js` 嘅 `doPost` 分發處（**驗完 apiKey 之後**，同其他 case 一齊）加：
    ```js
    case 'auth':            return doAuth_(msg);
    case 'setPassword':     return doSetPassword_(msg);
    case 'setPaymentCheck': return doSetPaymentCheck_(msg);
+   case 'getCourseSummary': return doGetCourseSummary_(msg);
    ```
    （如果 doPost 係 if/else 寫法，就照原有格式加同等兩句）
 3. **部署**：部署 → 管理部署 → ✏️ 編輯 → 建立新版本
@@ -41,8 +44,10 @@
 gs/
   Code.gs.course.js      ← 舊版 v4.13.0（唔郁，舊班照用）
   coursev5/
-    Code.gs.course.js    ← 舊版原文 ＋ 上面第 2 步嗰兩行 router（第 4 步一行如有）
+    Code.gs.course.js    ← 舊版原文 ＋ 上面第 2 步 router 三行
     Auth.gs              ← 本 repo apps-script/Auth.gs
+    PaymentCheck.gs      ← 本 repo apps-script/PaymentCheck.gs
+    Summary.gs           ← 本 repo apps-script/Summary.gs（getCourseSummary）
     VERSION.txt          → 5.0.0（coursev5）
 ```
 
@@ -89,6 +94,7 @@ function ensureApiKey() {
 2. 模版 GS 嘅 bound script 加 `ensureApiKey()`（上面嗰段）
 3. 部署 CourseFactory 做網頁應用程式（任何人）→ `/exec` 網址＋開班碼發俾 CL
 4. CL 開 APP → 🆕 新開班 → 🏛 連區會起表（即刻開真 GS）→ 複製 GS URL 交區管理系統 → 喺 APP 填晒所有嘢
+5. 區管理系統批核淨係 call `getCourseSummary`（一個 call 攞齊課程資料・預算 8 大類・通告檔案編號・訓練班電郵・批准狀態・報名數——合約 `docs/API.md`）；批好 tick「區會批准」格，CL 見 ✔ 先出通告；收款核對用 `setPaymentCheck`
 
 ### 多班共用 API（可選）
 

@@ -18,12 +18,36 @@
 | `setPaymentCheck` | `id`(=時間戳記),`verified`,`by` | `{saved,row,verified}` | **區管理系統用**：核對區帳戶後 tick「已核對收款」；identity 定位、唔 bump rev、自動補表頭 |
 | `getCourseSheetRaw` | — | `{input01,input02,input03,input04,resp,paramsWX,notice,attend,accept,finance,completion,cert,subsidy,pulledAt,rev,revSavedAt,revBy}` | 主同步（15 秒輪詢）；rev 供樂觀鎖；`attend`（Print_學員出席紀錄）係 coursev5 加嘅 dump |
 | `getCourseProfile` | — | 課程結構資料 | 連線測試＋解鎖頁職員名單 |
+| `getCourseSummary` | — | 見下「getCourseSummary 精簡批核 view」 | **區管理系統批核用**（`apps-script/Summary.gs`）：管理層只睇最重要嘅資料——一個 call 攞齊課程資料・節次・職員・預算 8 大類・通告要點（檔案編號/訓練班電郵）・批准狀態・報名數，減省行政時間。純讀、唔 bump rev |
 | `createCourse` | `masterKey`(開班碼),`courseName`,`edition?,section?,badge?,intake?,fee?,clName?` | `{exec,apiKey,courseId,courseName,firstLogin,url}` | **區級 CourseFactory**（`apps-script/CourseFactory.gs` 獨立部署）:CL 新開班**即刻起真 GS**（區管理系統 SCRIPT 要 URL 先連結批核）——copy 模版＋預填＋產 apiKey＋回傳 GS `url` 交區;APP 即刻連線 |
 | `setRegStatus` | `id`(=時間戳記),`status`(pending/approved/rejected/cancelled),`reviewer` | `{saved,id,status}` | 收生：接納/拒絕/取消。**唔檢查 rev、唔 bump rev**（identity 定位，安全） |
 | `saveCourseBatch` | `cells[{tab,row,col,value}]`,`baseRev`,`by` | `{saved,rev,savedAt,updated,skippedTabs}` | 批次寫格（開班文件／通告／分組） |
 | `addExpenseRow` | `amounts{B..J}`,`note` | `{added,row,receiptNo}` | 〔二階段〕支出 append-only，唔撞 rev |
 | `setCompletionRow` | `code|name`,`certNo?,pass?,failReason?` | `{updated,row,rev}` | 〔二階段〕完成報告 |
 | `setCertRow` | `code|name`,`certNo?,pickupDate?,signed?` | `{updated,row,rev}` | 〔二階段〕證書領取 |
+
+## getCourseSummary 精簡批核 view（coursev5）
+
+管理層批改唔使睇成張 GS——一個 call 攞齊最重要嘅資料（GAS 端 `apps-script/Summary.gs`；mock 端 `js/15-mock.js` 同一合約，重用 `parseAll`/`budgetSummary`）：
+
+```
+{ ok, data: {
+  courseName, edition, section, badge, customName, type1, type2,
+  intake, fee, quota, staffCount, deadline, publish,
+  sessions[{date,time,venue,onNotice}],
+  leader{name,title,phone,email},
+  staff[{role,name,title}],
+  budget{sections[{key,label,mapTo,budget}], total},   // 8 大類，同前端收支頁同一套
+  notice{fileNo,issueDate,eligibility,feeNote,uniform}, // 檔案編號＋訓練班電郵=管理層告知 CL 嘅輸入
+  courseEmail,                                          // 參數分頁「訓練班電郵」格
+  approved, regCount, pulledAt,
+} }
+```
+
+管理層對呢個 view 要確認嘅嘢：
+1. **通告檔案編號**（`notice.fileNo`）——管理層出編號話 CL 知，CL 填入通告頁「檔案編號」格
+2. **訓練班電郵**（`courseEmail`）——管理層告知 CL，CL 填入參數分頁格；通告查詢行會自動用佢（冇填先 fallback 班領導人電郵）
+3. 批好就 tick「區會批准」格（直接開 GS，或 `saveCourseBatch` 寫參數分頁）——CL 喺 APP 見到 ✔ 先出通告
 
 ## 密碼流程（coursev5）
 - 每班第一次登入 `1234`（GS 冇 `COURSE_PW_HASH` → `auth` 回 `firstLogin:true`）→ 前端即刻彈「請設定新密碼」

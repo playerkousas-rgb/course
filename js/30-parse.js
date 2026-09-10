@@ -69,7 +69,7 @@ function fmtShortDate(ymd) {
 
 /* ── 參數 W/X（區會常數） ── */
 function parseParamsWX(pw) {
-  const out = { portalUrl: '', fpsId: '', fpsName: '', districtWeb: '', approved: false };
+  const out = { portalUrl: '', fpsId: '', fpsName: '', districtWeb: '', approved: false, courseEmail: '' };
   if (!Array.isArray(pw)) return out;
   for (let i = 0; i < pw.length; i++) {
     const row = pw[i] || [];
@@ -81,6 +81,8 @@ function parseParamsWX(pw) {
     else if (w.indexOf('區會網址') >= 0) out.districtWeb = x;
     /* 區管理層批核訓練班寫呢格（經區管理系統/直接開 GS）;CL 喺 APP 見到 ✔ 先出通告 */
     else if (w.indexOf('區會批准') >= 0) out.approved = x === '✔' || x === '是' || x === 'TRUE';
+    /* 訓練班電郵（管理層告知 CL 先填;通告查詢行會用佢） */
+    else if (w.indexOf('訓練班電郵') >= 0) out.courseEmail = x;
   }
   return out;
 }
@@ -289,7 +291,8 @@ function composeNoticeDoc(get, params) {
     uniform: edits.uniform,
     remarks: [edits.remark1, edits.remark2, edits.remark3, edits.remark4, edits.remark5, edits.remark6].filter(x => x),
     enquiry: '如在' + (deadline ? fmtCNDate(deadline) : '截止日期') +
-      '前尚未接獲通知者或有任何查詢，請電郵至 ' + (leader ? leader.email : '') +
+      '前尚未接獲通知者或有任何查詢，請電郵至 ' +
+      ((params && params.courseEmail) || (leader ? leader.email : '')) +
       ' 或致電 ' + (leader ? leader.phone : '') + ' 與班領導人聯絡。',
     signer: edits.signer, deputy: edits.deputy,
   };
@@ -387,6 +390,66 @@ function mountStatus(st) {
     scriptUrl: (course && course.exec && !course.mock) ? course.exec : '',
     portalUrl: (st && st.params && st.params.portalUrl) || '',
   };
+}
+
+/* ── Input01 預算 → 每大類（照模版公式等效計；職員/學員人數取 Input01 B11/B13） ── */
+function budgetSummary(st) {
+  const out = { sections: [], total: 0 };
+  const g = st && st.raw && st.raw.input01;
+  if (!Array.isArray(g)) return out;
+  const num = (r, c) => {
+    const v = shCell(g, r, c);
+    const n = Number(String(v == null ? '' : v).replace(/[$,]/g, ''));
+    return Number.isFinite(n) ? n : 0;
+  };
+  const staffN = Number(st.info.staff) || 0;
+  const intakeN = Number(st.info.intake) || 0;
+  const sec = (key, label, mapTo, budget) => { out.sections.push({ key: key, label: label, mapTo: mapTo, budget: Math.round(budget * 100) / 100 }); out.total += budget; };
+
+  let v = 0;
+  IN1_MEALS.rows.forEach((r) => {
+    const per = num(r, IN1_MEALS.breakfast) + num(r, IN1_MEALS.lunch) + num(r, IN1_MEALS.dinner) + num(r, IN1_MEALS.snack) + num(r, IN1_MEALS.water);
+    if (!per) return;
+    const who = String(shCell(g, r, IN1_MEALS.who) || '');
+    v += per * (who.indexOf('職員') >= 0 ? staffN : intakeN);
+  });
+  sec('meal', '1. 膳食', ['B', 'C', 'D'], v);
+
+  v = 0;
+  IN1_RENT.rows.forEach((r) => { const q = num(r, IN1_RENT.qty), p = num(r, IN1_RENT.price); if (q && p) v += q * p; });
+  IN1_RENT_EXTRA.rows.forEach((r) => { if (!num(r, IN1_RENT.qty)) v += num(r, IN1_RENT_EXTRA.amount); });
+  [IN1_CAMP, IN1_LODGE].forEach((m) => m.rows.forEach((r) => {
+    const n2 = num(r, m.nights), pp = num(r, m.people), pr = num(r, m.price);
+    if (n2 && pp && pr) v += n2 * pp * pr;
+  }));
+  sec('rent', '2. 租金（場租＋露營＋住宿）', ['E'], v);
+
+  v = 0;
+  IN1_TRANSPORT.forEach((t) => t.rows.forEach((r) => { v += num(r, IN1_TRANSPORT_COLS.budget); }));
+  sec('transport', '3. 交通', ['F'], v);
+
+  v = 0;
+  IN1_HANDOUTS.rows.forEach((r) => { v += num(r, IN1_HANDOUTS.qty) * num(r, IN1_HANDOUTS.price); });
+  sec('handouts', '4. 講義及快勞', ['H'], v);
+
+  v = 0;
+  IN1_PROGRAMME.rows.forEach((r) => { v += num(r, IN1_PROGRAMME.qty) * num(r, IN1_PROGRAMME.price); });
+  sec('programme', '5. 節目', ['I'], v);
+
+  v = 0;
+  IN1_ADMIN.rows.forEach((r) => { v += num(r, IN1_ADMIN.qty) * num(r, IN1_ADMIN.price); });
+  sec('admin', '6. 行政', ['G'], v);
+
+  v = 0;
+  IN1_SOUVENIR.rows.forEach((r) => { v += num(r, IN1_SOUVENIR.qty) * num(r, IN1_SOUVENIR.price); });
+  sec('souvenir', '7. 紀念品', ['I'], v);
+
+  v = 0;
+  IN1_MISC.rows.forEach((r) => { v += num(r, IN1_MISC.amount); });
+  sec('misc', '8. 其他', ['I'], v);
+
+  out.total = Math.round(out.total * 100) / 100;
+  return out;
 }
 
 /* ── Input03 時間表（每節 10 行 block;R(head) 日期/地點、R(head+1) 時間/服裝、head+4 起 rundown） ── */

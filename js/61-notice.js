@@ -24,12 +24,28 @@ regPage('notice', function (root) {
       '🌐 通告已上網、成員系統報名進行中（' + ms.regCount + ' 位已報名）。'));
   }
 
+  /* 參數分頁欄位（label 掃描搵行;label 空會連 label 一齊寫入） */
+  function paramField(label, hint) {
+    const rows = (st.raw && st.raw.paramsWX) || [];
+    let r = 0;
+    for (let i = 0; i < rows.length; i++) {
+      if (String(rows[i][0] == null ? '' : rows[i][0]).indexOf(label) >= 0) { r = i + 1; break; }
+    }
+    if (!r) r = rows.length + 1;
+    if (!String((rows[r - 1] || [])[0] || '').trim()) {
+      /* A 欄 label 都未有（舊班未升級模版）→ 連 label 一齊做草稿,儲存時兩格齊寫 */
+      Store.addCellDraft(TAB.PARAM, r, 1, label, '參數 ' + label);
+    }
+    return cellField(TAB.PARAM, { r: r, c: 2, label: label + '（管理層告知）', type: 'text', hint: hint });
+  }
+
   /* ── 編輯面板 ── */
   const editCard = h('div', { class: 'card no-print' },
     h('div', { class: 'card-title' }, '✏️ 通告可編欄位'),
-    h('div', { class: 'row-sub' }, '其餘（標題・節次・名額・截止・FPS・查詢）全部由「開班文件」自動帶入，唔使填'),
+    h('div', { class: 'row-sub' }, '檔案編號＋訓練班電郵要向管理層攞（佢哋話你知先填）；其餘（標題・節次・名額・截止・FPS）全部由「開班文件」自動帶入'),
     h('div', { class: 'grid-2c' },
       cellField(TAB.NOTICE, NOTICE_EDIT.fileNo),
+      paramField('訓練班電郵', '管理層告知先用；通告查詢行會自動用呢個電郵'),
       cellField(TAB.NOTICE, NOTICE_EDIT.issueDate)),
     h('div', {}, cellField(TAB.NOTICE, NOTICE_EDIT.eligibility)),
     h('div', {}, cellField(TAB.NOTICE, NOTICE_EDIT.feeNote)),

@@ -47,7 +47,7 @@ regPage('dashboard', function (root) {
   mountCard.appendChild(mChips);
   const mRow = h('div', { class: 'btn-row', style: { marginTop: '10px', flexWrap: 'wrap' } });
   if (ms.phase === 'writing') {
-    mRow.appendChild(h('span', { class: 'row-sub' }, '📝 CL 填寫中——填好開班文件＋時間表＋通告之後，複製網址（GS＋SCRIPT）交區管理系統；區管理層批好會 tick「區會批准」'));
+    mRow.appendChild(h('span', { class: 'row-sub' }, '📝 CL 填寫中——填好開班文件＋時間表＋通告之後，複製網址（GS＋SCRIPT）交區管理系統；記得向管理層攞「通告檔案編號」＋「訓練班電郵」填入通告頁；區管理層批好會 tick「區會批准」'));
     if (ms.gsUrl || ms.scriptUrl) mRow.appendChild(h('button', { class: 'btn btn-primary btn-sm', onclick: function () { showGsUrlModal(ms.gsUrl, ms.scriptUrl); } }, '📋 複製網址交區'));
     if (course && course.mock) mRow.appendChild(h('button', { class: 'btn btn-sm', onclick: async function () {
       MockDemo.approveCourse(course.key); await Sync.refresh('silent'); toast('🧪 區管理層已 tick「區會批准」（演示）', 'ok'); UI.rerenderPage();

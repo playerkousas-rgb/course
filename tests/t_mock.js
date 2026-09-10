@@ -199,6 +199,30 @@ async function main() {
   ok(fRaw.resp.length === 2 && fRaw.resp[1][RC['中文姓名'] - 1] === nr2.name, '報名流入（掛載信號）: ' + nr2.name);
   MockDemo.reset();
 
+  /* ══ getCourseSummary（區管理層精簡批核 view——一個 call 攞齊最重要嘅資料） ══ */
+  section('getCourseSummary 精簡批核');
+  const gsD = await MockAPI.call('getCourseSummary', { apiKey: KEY });
+  ok(gsD.ok, 'demo summary ok');
+  const sm = gsD.data;
+  eq(sm.courseName, '攝影專科徽章訓練班', '課程名');
+  ok(sm.sessions.length >= 3, '節次（通告用）>=3: ' + sm.sessions.length);
+  ok(sm.leader && sm.leader.name, '班領導人: ' + (sm.leader && sm.leader.name));
+  ok(Array.isArray(sm.staff) && sm.staff.length >= 1, '職員表');
+  eq(sm.budget.sections.length, 8, '預算 8 大類');
+  ok(sm.budget.total > 0, '預算總額 > 0: ' + sm.budget.total);
+  ok(/26XX/.test(sm.notice.fileNo), '通告檔案編號: ' + sm.notice.fileNo);
+  ok(sm.notice.eligibility && sm.notice.feeNote && sm.notice.uniform, '通告資格/費用/服裝要點齊');
+  ok(sm.courseEmail === 'photo.course@skwscout.org.hk', '訓練班電郵（管理層告知後 CL 填）');
+  ok(sm.approved === true, '已批核 ✔');
+  ok(sm.regCount === 10, '報名數 10: ' + sm.regCount);
+  /* 未批核嘅新班:summary 反映 false + 0 報名 */
+  const fc2 = await MockAPI.call('createCourse', { courseName: 'summary 測試班', clName: '陳大文' });
+  const gsN = (await MockAPI.call('getCourseSummary', { apiKey: fc2.data.apiKey })).data;
+  ok(gsN.approved === false, '新班未批核');
+  ok(gsN.regCount === 0, '新班 0 報名');
+  eq(gsN.courseName, 'summary 測試班', '新班課程名');
+  MockDemo.reset();
+
   /* ══ createCourse（CL 起表:新空白模版班,唔影響原有班） ══ */
   section('createCourse CL 起表');
   MockDemo.reset();

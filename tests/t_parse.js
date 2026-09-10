@@ -99,6 +99,7 @@ const raw = {
   paramsWX: [
     ['區會常數（唔好改名）', ''],
     ['區會批准', '✔'],
+    ['訓練班電郵', 'course.test@skwscout.org.hk'],
     ['成員系統報名網址', 'https://portal.test/training'],
     ['FPS 識別碼', '102866183'],
     ['FPS 戶口名稱', 'SAHK SKW'],
@@ -128,6 +129,7 @@ ok(p.regs[0].sta, 'STA 正本已交');
 ok(p.regs[1].pcheck === false, '第二筆未核對收款 → false');
 section('掛載狀態 parseParamsWX');
 ok(p.params.approved === true, '區會批准 ✔');
+ok(p.params.courseEmail === 'course.test@skwscout.org.hk', '訓練班電郵（管理層告知）');
 
 section('時間表 parseInput03');
 eq(p.input03.blocks.length, 2, '兩個有料 block');
@@ -169,7 +171,14 @@ eq(doc.sessions[0].date, '2026年10月17日（星期六）', '通告顯示日期
 ok(doc.payText.indexOf('102866183') >= 0, 'FPS 識別碼入文');
 ok(doc.signupText.indexOf('https://portal.test/training') >= 0, '成員系統網址入文');
 eq(doc.leaderText, '陳大文先生（木章）', '班領導人行');
-ok(doc.enquiry.indexOf('d@x.hk') >= 0 && doc.enquiry.indexOf('91234567') >= 0, '查詢行含電郵電話');
+ok(doc.enquiry.indexOf('course.test@skwscout.org.hk') >= 0, '查詢行用訓練班電郵（管理層告知）優先');
+ok(doc.enquiry.indexOf('d@x.hk') < 0, '有訓練班電郵就唔用班領導人電郵');
+ok(doc.enquiry.indexOf('91234567') >= 0, '查詢行含電話');
+/* 冇訓練班電郵 → fallback 班領導人電郵 */
+const pNoEmail = JSON.parse(JSON.stringify(p));
+pNoEmail.params.courseEmail = '';
+const doc2 = composeNoticeDoc((tab, r, c) => shCell(tab === TAB.IN1 ? in1 : tab === TAB.IN2 ? in2 : notice, r, c), pNoEmail.params);
+ok(doc2.enquiry.indexOf('d@x.hk') >= 0, '冇訓練班電郵 → 用班領導人電郵');
 
 /* 空值防呆 */
 section('空表防呆');
