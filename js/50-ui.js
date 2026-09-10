@@ -215,25 +215,64 @@ const UI = {
       }
     });
 
-    function tryUnlock() {
+    const unlockBtn = h('button', { class: 'btn btn-primary', onclick: () => tryUnlock() }, '🔓 進入系統');
+    let busy = false;
+
+    async function tryUnlock() {
+      if (busy) return;
       const now = Date.now();
       if (now < lockUntil) {
         msg.textContent = '試得多咗，等 ' + Math.ceil((lockUntil - now) / 1000) + ' 秒再試。';
         msg.className = 'form-msg err'; return;
       }
       const pw = pwIn.value;
-      if (pw !== (Store.config.password || APP_INFO.defaultPassword)) {
-        fails++;
-        if (fails >= 5) { lockUntil = Date.now() + 15000; fails = 0; }
-        msg.textContent = '密碼唔啱。' + (lockUntil ? '' : '（預設 1234，可喺設定改）');
-        msg.className = 'form-msg err'; return;
-      }
+      if (!pw) { msg.textContent = '請輸入密碼。'; msg.className = 'form-msg err'; return; }
       let staff = staffSel.value === '__other__' ? staffOther.value.trim() : staffSel.value;
       if (!staff) { msg.textContent = '請揀（或填）你嘅姓名，方便防呆記錄。'; msg.className = 'form-msg err'; return; }
-      Store.setStaffName(staff);
-      Store.setUnlocked();
-      Store.pushLog('unlock', '進入系統');
-      UI.render();
+
+      busy = true; unlockBtn.textContent = '驗證中…'; msg.textContent = ''; msg.className = 'form-msg';
+      function localFail(txt) {
+        fails++;
+        if (fails >= 5) { lockUntil = Date.now() + 15000; fails = 0; }
+        msg.textContent = txt; msg.className = 'form-msg err';
+      }
+      function enterSystem(note) {
+        Store.setStaffName(staff);
+        Store.setUnlocked();
+        Store.pushLog('unlock', '進入系統' + (note || ''));
+        UI.render();
+      }
+
+      const res = await api.auth(pw);
+
+      if (res && res.ok) {
+        /* coursev5 後端：密碼正確 */
+        const course = Store.activeCourse();
+        if (course && !course.mock && course.authV5 !== true) { course.authV5 = true; Store.saveConfig(); }
+        const firstLogin = res.data && res.data.firstLogin && res.data.role !== 'admin';
+        enterSystem(firstLogin ? '（首次登入）' : '');
+        if (firstLogin) UI.promptChangePw(true);
+        return;
+      }
+
+      const errTxt = String((res && res.error) || '');
+      if (/未知|unknown/i.test(errTxt)) {
+        /* 舊版後端（coursev4）冇 auth action → 退返本機密碼閘（同舊行為一致） */
+        const course = Store.activeCourse();
+        if (course && !course.mock && course.authV5 !== false) { course.authV5 = false; Store.saveConfig(); }
+        if (pw === (Store.config.password || APP_INFO.defaultPassword)) {
+          enterSystem('（舊版後端）');
+          toast('後端係舊版，未支援全組密碼——建議升級 coursev5', 'warn');
+        } else {
+          localFail('密碼唔啱。（預設 1234）');
+        }
+      } else {
+        /* 後端有回應但密碼錯／被鎖 */
+        localFail(errTxt || '密碼唔啱。');
+      }
+
+      if (unlockBtn.isConnected) unlockBtn.textContent = '🔓 進入系統';
+      busy = false;
     }
 
     app.appendChild(h('div', { class: 'screen-center' },
@@ -245,9 +284,9 @@ const UI = {
         h('div', { class: 'field' }, h('label', { class: 'flabel' }, '你是'), staffSel, staffOther),
         msg,
         h('div', { class: 'btn-row' },
-          h('button', { class: 'btn btn-primary', onclick: tryUnlock }, '🔓 進入系統'),
+          unlockBtn,
           h('button', { class: 'btn btn-ghost', onclick: () => { Store.config.activeId = null; Store.saveConfig(); UI.render(); } }, '切換訓練班')),
-        h('div', { class: 'foot-note' }, '密碼只係輕量閘；真正權限由 API Key 控制'))));
+        h('div', { class: 'foot-note' }, '每班第一次登入密碼 1234，入到會提示即刻改密碼'))));
 
     pwIn.addEventListener('keydown', (e) => { if (e.key === 'Enter') tryUnlock(); });
   },
@@ -401,6 +440,46 @@ const UI = {
     ] });
   },
 
+  /* ── 更改共職員密碼（後端驗證，全體生效；firstLogin=首次登入提示） ── */
+  promptChangePw: function (firstLogin) {
+    const oldIn = h('input', { class: 'input', type: 'password', placeholder: '現時密碼（預設 1234）', autocomplete: 'off' });
+    const p1 = h('input', { class: 'input', type: 'password', placeholder: '新密碼（至少 4 位）', autocomplete: 'new-password' });
+    const p2 = h('input', { class: 'input', type: 'password', placeholder: '重複新密碼', autocomplete: 'new-password' });
+    const msg = h('div', { class: 'form-msg' });
+    const btn = h('button', { class: 'btn btn-primary' }, '💾 更新密碼');
+    btn.addEventListener('click', async () => {
+      if (!p1.value || p1.value !== p2.value) { msg.textContent = '兩次新密碼唔一致。'; msg.className = 'form-msg err'; return; }
+      msg.textContent = '驗證中…'; msg.className = 'form-msg';
+      btn.disabled = true;
+      const res = await api.setPassword(oldIn.value, p1.value);
+      btn.disabled = false;
+      if (res && res.ok) {
+        m.close();
+        Store.pushLog('password', '已更改共職員密碼');
+        toast('✅ 密碼已更新——對所有班職員即時生效', 'ok');
+      } else {
+        msg.textContent = (res && res.error) || '更新失敗';
+        msg.className = 'form-msg err';
+      }
+    });
+    const m = modal({
+      title: firstLogin ? '🔑 首次登入——請設定新密碼' : '🔑 更改共職員密碼',
+      body: h('div', {},
+        firstLogin ? h('div', { class: 'form-msg warn' }, '呢班仲用緊預設密碼 1234——改做班內密碼先至安全。新密碼對所有班職員生效。') : null,
+        h('div', { class: 'field' }, h('label', { class: 'flabel' }, '現時密碼'), oldIn),
+        h('div', { class: 'field' }, h('label', { class: 'flabel' }, '新密碼'), p1),
+        h('div', { class: 'field' }, h('label', { class: 'flabel' }, '重複新密碼'), p2),
+        msg),
+      actions: [
+        firstLogin
+          ? h('button', { class: 'btn btn-ghost', onclick: () => { m.close(); toast('記得盡快喺 ⚙️ 設定更改密碼', 'warn'); } }, '稍後再改')
+          : h('button', { class: 'btn btn-ghost', onclick: () => m.close() }, '取消'),
+        btn,
+      ],
+    });
+    setTimeout(() => oldIn.focus(), 50);
+  },
+
   /* ── 設定 ── */
   showSettings: function () {
     const course = Store.activeCourse();
@@ -425,13 +504,19 @@ const UI = {
       h('div', { class: 'card-in' },
         h('div', { class: 'card-title' }, '👤 職員身份（寫入記錄用）'),
         h('div', { class: 'btn-row' }, staffIn, h('button', { class: 'btn btn-sm', onclick: () => { Store.setStaffName(staffIn.value); UI.updateHeader(); toast('✅ 已更新'); } }, '保存'))),
-      h('div', { class: 'card-in' },
-        h('div', { class: 'card-title' }, '🔒 密碼（本裝置）'),
-        h('div', { class: 'field' }, pw1), h('div', { class: 'field' }, pw2),
-        h('button', { class: 'btn btn-sm', onclick: () => {
-          if (!pw1.value || pw1.value !== pw2.value) { toast('兩次輸入唔同／空的', 'err'); return; }
-          Store.config.password = pw1.value; Store.saveConfig(); toast('✅ 密碼已更新（只影響呢部裝置）');
-        } }, '改密碼')),
+      (course.authV5 === false && !course.mock)
+        ? h('div', { class: 'card-in' },
+            h('div', { class: 'card-title' }, '🔒 密碼（舊版後端——只影響本裝置）'),
+            h('div', { class: 'row-sub' }, '呢班後端係舊版，未支援全組密碼；密碼只存喺呢部裝置。'),
+            h('div', { class: 'field' }, pw1), h('div', { class: 'field' }, pw2),
+            h('button', { class: 'btn btn-sm', onclick: () => {
+              if (!pw1.value || pw1.value !== pw2.value) { toast('兩次輸入唔同／空的', 'err'); return; }
+              Store.config.password = pw1.value; Store.saveConfig(); toast('✅ 本機密碼已更新');
+            } }, '改密碼'))
+        : h('div', { class: 'card-in' },
+            h('div', { class: 'card-title' }, '🔑 共職員密碼（後端驗證・全體生效）'),
+            h('div', { class: 'row-sub' }, '每班第一次登入用預設 1234，之後改成班內密碼；錯 5 次會鎖 10 分鐘。'),
+            h('button', { class: 'btn btn-sm', onclick: () => UI.promptChangePw(false) }, '🔑 更改密碼')),
       h('div', { class: 'card-in' },
         h('div', { class: 'card-title' }, '🔄 同步間隔'),
         h('div', { class: 'btn-row' }, pollSel, h('button', { class: 'btn btn-sm', onclick: () => {
@@ -442,6 +527,7 @@ const UI = {
         h('div', { class: 'btn-row' },
           h('button', { class: 'btn btn-sm', onclick: () => { const r = MockDemo.newReg(); toast('📥 已模擬新報名：' + r.name + '（等下一次自動同步／手動同步就見到）', 'ok'); Sync.refresh('manual'); } }, '📥 模擬新報名'),
           h('button', { class: 'btn btn-sm', onclick: () => { const r = MockDemo.otherStaffSave(); toast('🧪 另一職員（李美芬）已改咗「' + r.changed + '」並儲存（rev ' + r.rev + '）', 'warn'); Sync.refresh('manual'); } }, '🧪 模擬另一職員儲存'),
+          h('button', { class: 'btn btn-sm', onclick: () => { MockDemo.resetPw(); toast('🔑 演示班密碼已重設做 1234（重新鎖定後可試首次登入流程）', 'ok'); } }, '🔑 重設密碼'),
           h('button', { class: 'btn btn-sm btn-danger', onclick: async () => {
             if (await confirmDlg('重設演示資料', '成個演示工作簿會回復初始狀態（草稿都會清埋）', { danger: true, okText: '重設' })) {
               MockDemo.reset(); Store.clearDrafts(); await Sync.refresh('manual'); toast('♻️ 已重設', 'ok');

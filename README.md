@@ -51,21 +51,27 @@ CL 開新 Sheet → 貼 Script → 一鍵建表 → 部署 /exec → 交 API Key
 | identity 定位 | 報名狀態用「時間戳記」對行（setRegStatus），分組用報名 id 重新對行先寫——新報名插入都唔會寫錯行 |
 | 雙擊／重複防護 | 接納按鈕 busy 鎖；批量逐筆回報成敗 |
 | 留名記錄 | 每次寫入以你揀嘅職員名記錄（批核人欄＋rev by＋本機操作紀錄） |
+| 後端密碼閘 | 密碼喺 GS 驗證（SHA-256）；錯 5 次鎖 10 分鐘；有後備管理員帳號（只寫喺 GS） |
 | 閂頁提示 | 有未儲存草稿時瀏覽器會問你 |
 | 超名額警告 | 接納／批量接納超過名額會先問 |
 
 ## 🚀 快速開始
 
 ### 演示模式（唔使任何嘢）
-開 APP → 「📊 演示模式」→ 密碼 `1234` → 揀職員名。
+開 APP → 「📊 演示模式」→ 密碼 `1234`（會即刻提示改密碼，試晒 coursev5 流程；設定入面有 🔑 重設密碼掣）→ 揀職員名。
 設定（⚙️）入面有演示工具：**📥 模擬新報名**、**🧪 模擬另一職員儲存**（即刻試防呆衝突流程）、♻️ 重設。
 
 ### 連真班（每班一次）
-1. CL 照舊開新空白 Google Sheet → 貼 `Code.gs.course.js`（正本喺 `scout-district-portal`）→ `setupCourseSheet()` → 部署 /exec（執行身分：我自己；存取：任何人）→ 產生 API Key
-2. 職員開 APP → 貼 /exec＋API Key → 連線
+1. CL 照舊開新空白 Google Sheet → 貼 course GS（**新版 `coursev5`**——升級方法見下）→ `setupCourseSheet()` → 部署 /exec（執行身分：我自己；存取：任何人）→ 產生 API Key
+2. 職員開 APP → 貼 /exec＋API Key → 連線 → 第一次登入密碼 `1234` → 即刻提示改做班內密碼
 3. 撳 ⚙️ → 「🔗 複製職員連結」→ Send 俾其他職員（網址自帶參數，一按即入）
 
-> 建議將 `Code.gs.course.js` 正本抄一份入 `apps-script/`（而家冇，避免未經授權複製正本）。
+### coursev5（新版 GS・三邊共用）
+為免同舊版 `Code.gs.course.js`（v4.13.0）撈亂，新版叫 **`coursev5`（v5.0.0）**：
+- 新增 `auth`／`setPassword` action（共職員密碼＋後備管理員，帳號**只寫喺 GS**）
+- 只加唔改：所有既有 action 回應原封不動，成員系統 `addReg` 零影響
+- 升級套件：[`apps-script/Auth.gs`](apps-script/Auth.gs)（直接貼入 GAS 專案新檔案）＋ [`apps-script/COURSEV5-UPGRADE.md`](apps-script/COURSEV5-UPGRADE.md)（兩行 router＋同步入區管理系統嘅存放結構）
+- 本前端自動適應：有 `auth` → v5 流程；冇 → 舊版本機閘（完全向下相容）
 
 ## 🧪 開發
 
@@ -96,7 +102,7 @@ python3 -m http.server 8000                    # 本地預覽
 
 ## ⚠️ 注意
 
-- 座標跟 **Code.gs.course.js v4.13.0 模版**；人手改過行位嘅舊表唔保證啱（Script 原註釋都有講）
+- 座標跟 **Code.gs.course.js v4.13.0 模版**（coursev5 原用同一座標）；人手改過行位嘅舊表唔保證啱（Script 原註釋都有講）
 - 公式欄（旅號・學員編號・Input02 G 欄自動日期）只讀；黃色自動格（Input02 B1/B4/B5/B6）覆寫前會 confirm
 - 日期一律以香港時區處理（GAS Date dump 係 UTC ISO，前端轉 `Asia/Hong_Kong`）
-- 密碼只係輕量閘（防亂入）；真正權限由 API Key 控制——唔好將職員連結流出街外
+- 密碼閘防亂入＋防爆鎖；真正權限由 API Key 控制——唔好將職員連結流出街外

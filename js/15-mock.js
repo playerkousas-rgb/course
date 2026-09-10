@@ -167,7 +167,7 @@ function mockLoad() {
   if (MOCK_STATE) return MOCK_STATE;
   try {
     const s = localStorage.getItem(LS.mock);
-    if (s) { MOCK_STATE = JSON.parse(s); return MOCK_STATE; }
+    if (s) { MOCK_STATE = JSON.parse(s); mockMigrate(MOCK_STATE); return MOCK_STATE; }
   } catch (e) { /* 忽略 */ }
   MOCK_STATE = mockSeedState();
   mockPersist();
@@ -253,6 +253,8 @@ const MockAPI = {
         pulledAt: new Date().toISOString(),
       });
     }
+    if (action === 'auth') return mockPwAuth(state, b);
+    if (action === 'setPassword') return mockPwSet(state, b);
     if (action === 'getCourseSheetRaw') {
       return mockOk({
         input01: state.sheets[TAB.IN1], input02: mockDumpIn2(state),
@@ -349,6 +351,60 @@ const MockAPI = {
   },
 };
 
+/* ── coursev5 密碼系統（同 Auth.gs 合約一致） ──
+ * 每班第一次登入 1234（firstLogin）→ 提示改密碼；
+ * 密碼格輸入「帳號:密碼」= 後備管理員登入（真後備帳號只寫喺 GS Auth.gs，mock 用 MockDemo.setAdmin 設定嚟測試） */
+const MOCK_BACKEND_V = '5.0.0';
+function mockPwAuth(state, b) {
+  const a = state.auth || (state.auth = { fails: 0, lockUntil: 0 });
+  if (Date.now() < (a.lockUntil || 0)) {
+    return mockErr('嘗試次數太多，請 ' + Math.ceil((a.lockUntil - Date.now()) / 60000) + ' 分鐘後再試');
+  }
+  const pw = String(b.password == null ? '' : b.password);
+  if (pw.indexOf(':') >= 0) {
+    const i = pw.indexOf(':');
+    const adm = state.admin;
+    if (adm && pw.slice(0, i) === adm.user && pw.slice(i + 1) === adm.pw) {
+      return mockOk({ role: 'admin', firstLogin: false, v: MOCK_BACKEND_V });
+    }
+    return mockPwFail(state, a);
+  }
+  const cur = state.pw ? String(state.pw.current) : '1234';
+  if (pw !== cur) return mockPwFail(state, a);
+  a.fails = 0;
+  return mockOk({ role: 'staff', firstLogin: !(state.pw && state.pw.changed), v: MOCK_BACKEND_V });
+}
+function mockPwFail(state, a) {
+  a.fails = (a.fails || 0) + 1;
+  let out;
+  if (a.fails >= 5) { a.lockUntil = Date.now() + 10 * 60 * 1000; a.fails = 0; out = mockErr('密碼錯誤。試得太多，已鎖 10 分鐘'); }
+  else out = mockErr('密碼錯誤');
+  mockPersist();
+  return out;
+}
+function mockPwSet(state, b) {
+  const a = state.auth || (state.auth = { fails: 0, lockUntil: 0 });
+  if (Date.now() < (a.lockUntil || 0)) return mockErr('嘗試次數太多，請稍後再試');
+  const oldPw = String(b.oldPassword == null ? '' : b.oldPassword);
+  const newPw = String(b.newPassword == null ? '' : b.newPassword);
+  let okOld = false;
+  if (oldPw.indexOf(':') >= 0) {
+    const i = oldPw.indexOf(':');
+    const adm = state.admin;
+    okOld = !!(adm && oldPw.slice(0, i) === adm.user && oldPw.slice(i + 1) === adm.pw);
+  } else {
+    okOld = oldPw === (state.pw ? String(state.pw.current) : '1234');
+  }
+  if (!okOld) return mockPwFail(state, a);
+  if (newPw.length < 4) return mockErr('新密碼至少 4 位');
+  if (newPw === '1234') return mockErr('新密碼唔可以係預設 1234');
+  if (newPw.indexOf(':') >= 0) return mockErr('新密碼唔可以有「:」');
+  state.pw = { current: newPw, changed: true };
+  a.fails = 0; a.lockUntil = 0;
+  mockPersist();
+  return mockOk({ saved: true });
+}
+
 /* saveCourseBatch 核心（setCourseCells 同一條路） */
 function mockBatchWrite(state, b) {
   const cells = b.cells || [];
@@ -419,4 +475,8 @@ const MockDemo = {
     return { name: p.nameZh, ts };
   },
   reset: mockReset,
+  /* 設定 mock 管理員帳號（測試「帳號:密碼」登入用；真後備帳號只寫喺 GS Auth.gs） */
+  setAdmin: function (user, pw) { const s = mockLoad(); s.admin = { user: user, pw: pw }; mockPersist(); },
+  /* 重設密碼狀態（等於 GS 刪 COURSE_PW_HASH → 回復 1234） */
+  resetPw: function () { const s = mockLoad(); s.pw = { current: '1234', changed: false }; s.auth = { fails: 0, lockUntil: 0 }; mockPersist(); },
 };

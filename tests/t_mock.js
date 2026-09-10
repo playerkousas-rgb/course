@@ -3,7 +3,7 @@
 const { makeCtx, load, val, ok, eq, section, done } = require('./harness');
 const ctx = makeCtx();
 load(ctx, ['js/00-config.js', 'js/30-parse.js', 'js/15-mock.js']);
-const { RESP_HEADERS, RC, TAB, MockAPI, MOCK_API_KEY } = val(ctx, '({ RESP_HEADERS, RC, TAB, MockAPI, MOCK_API_KEY })');
+const { RESP_HEADERS, RC, TAB, MockAPI, MOCK_API_KEY, MockDemo } = val(ctx, '({ RESP_HEADERS, RC, TAB, MockAPI, MOCK_API_KEY, MockDemo })');
 
 const KEY = MOCK_API_KEY;
 
@@ -85,6 +85,52 @@ async function main() {
   section('未知 action');
   const unk = await MockAPI.call('whatever', { apiKey: KEY });
   ok(unk.ok === false && /未知的 action/.test(unk.error), '未知 action');
+
+  /* ══ coursev5 密碼系統 ══ */
+  section('auth 密碼系統（coursev5）');
+  MockDemo.resetPw();
+
+  let a = await MockAPI.call('auth', { apiKey: KEY, password: '1234' });
+  ok(a.ok && a.data.firstLogin === true && a.data.role === 'staff', '預設 1234 → firstLogin（提示改密碼）');
+  ok(a.ok && a.data.v === '5.0.0', '回應帶版本 v5.0.0');
+
+  a = await MockAPI.call('auth', { apiKey: KEY, password: '0000' });
+  ok(!a.ok && /密碼錯誤/.test(a.error), '錯密碼 → 拒絕');
+
+  a = await MockAPI.call('setPassword', { apiKey: KEY, oldPassword: '0000', newPassword: 'abcd1234' });
+  ok(!a.ok, '舊密碼錯 → 唔俾改');
+
+  a = await MockAPI.call('setPassword', { apiKey: KEY, oldPassword: '1234', newPassword: '1234' });
+  ok(!a.ok, '新密碼唔可以係 1234');
+
+  a = await MockAPI.call('setPassword', { apiKey: KEY, oldPassword: '1234', newPassword: 'ab' });
+  ok(!a.ok, '新密碼太短（≥4）');
+
+  a = await MockAPI.call('setPassword', { apiKey: KEY, oldPassword: '1234', newPassword: 'hk2026' });
+  ok(a.ok, '改密碼 ok');
+
+  a = await MockAPI.call('auth', { apiKey: KEY, password: 'hk2026' });
+  ok(a.ok && a.data.firstLogin === false, '新密碼登入 → firstLogin=false');
+
+  a = await MockAPI.call('auth', { apiKey: KEY, password: '1234' });
+  ok(!a.ok, '舊密碼已失效');
+
+  MockDemo.setAdmin('tester', 'testpw');   /* mock 管理員（真後備帳號只寫喺 GS Auth.gs） */
+  a = await MockAPI.call('auth', { apiKey: KEY, password: 'tester:testpw' });
+  ok(a.ok && a.data.role === 'admin' && a.data.firstLogin === false, '「帳號:密碼」→ 管理員登入');
+
+  a = await MockAPI.call('setPassword', { apiKey: KEY, oldPassword: 'tester:testpw', newPassword: 'hk2027' });
+  ok(a.ok, '管理員可以重設密碼');
+  a = await MockAPI.call('auth', { apiKey: KEY, password: 'hk2027' });
+  ok(a.ok, '管理員重設後新密碼生效');
+
+  for (let i = 0; i < 5; i++) await MockAPI.call('auth', { apiKey: KEY, password: 'wrong' + i });
+  a = await MockAPI.call('auth', { apiKey: KEY, password: 'hk2027' });
+  ok(!a.ok && /嘗試次數太多/.test(a.error), '錯 5 次 → 鎖 10 分鐘（啱密碼都暫時入唔到）');
+
+  MockDemo.resetPw();
+  a = await MockAPI.call('auth', { apiKey: KEY, password: '1234' });
+  ok(a.ok && a.data.firstLogin === true, 'resetPw → 回復預設 1234');
 
   done();
 }

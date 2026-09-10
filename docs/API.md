@@ -21,6 +21,12 @@
 | `setCompletionRow` | `code|name`,`certNo?,pass?,failReason?` | `{updated,row,rev}` | 〔二階段〕完成報告 |
 | `setCertRow` | `code|name`,`certNo?,pickupDate?,signed?` | `{updated,row,rev}` | 〔二階段〕證書領取 |
 
+## 密碼流程（coursev5）
+- 每班第一次登入 `1234`（GS 冇 `COURSE_PW_HASH` → `auth` 回 `firstLogin:true`）→ 前端即刻彈「請設定新密碼」
+- 改完 → `firstLogin:false`；密碼以 SHA-256 存 Script Properties
+- 錯 5 次 → 鎖 10 分鐘（CacheService）；重設方法見 `apps-script/COURSEV5-UPGRADE.md`
+- **向下相容**：舊版後端（v4.13.0）冇 `auth` action → 前端自動退回本機密碼閘（1234），並標記該班「舊版後端」
+
 ## rev 語義（防呆核心，mock 已照做）
 
 - `_Sync` 隱藏分頁：A1 rev／B1 savedAt／C1 by

@@ -61,4 +61,6 @@ const api = {
   listRegs: () => apiCall('listRegs', {}),
   setRegStatus: (id, status, reviewer) => apiCall('setRegStatus', { id, status, reviewer }),
   batch: (cells, baseRev, by) => apiCall('saveCourseBatch', { cells, baseRev, by }),
+  auth: (password) => apiCall('auth', { password: password }),
+  setPassword: (oldPassword, newPassword) => apiCall('setPassword', { oldPassword: oldPassword, newPassword: newPassword }),
 };
