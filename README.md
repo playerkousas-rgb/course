@@ -8,26 +8,29 @@
 
 ---
 
-## 🗺️ 喺成個生態嘅位置
+## 🗺️ 喺成個生態嘅位置（三方中樞）
+
+**呢個系統＝所有訓練班嘅起點**——CL 喺度開班（即刻起真 GS）、教學模版（開班文件_Template）由呢度 copy 分發、成個生命週期全部喺度管理。**成個改變計劃嘅重中之重。**
 
 ```
-區管理系統 scout-district-portal（開班登記・批核・CourseLinks）
-      │ 每班一張工作簿（Code.gs.course.js 模版 setupCourseSheet 起表）
-      ▼
-CL 開新 Sheet → 貼 Script → 一鍵建表 → 部署 /exec → 交 API Key 俾 ADC
-      │
-      ├─ 成員系統 member-portal /training → 報名（addReg）→ 寫入「表格回應」＋入數紙存 Drive
-      │
-      ▼
-★ 本 APP（course repo）：職員由頭到尾管理呢一班
-      ① 開班文件（Input01 預算 + Input02 班資料）  ← 新版改喺系統內填
-      ② 通告（自動組版預覽＋列印 PDF）              ← 跟舊流程交區網/總會
-      ③ 收生確認（接納/拒絕/取消・批量・入數紙對單）
-      ④ 學員名單（學員編號・分組・CSV・列印）
-      ⑤〔下一階段〕出席點名・時間表・收支表・完成報告・證書領取
+★ 本 APP（course repo）——訓練班系統，連結三方：成員・管理・訓練班
+      ① 🆕 CL 新開班 → 即刻喺區 Drive 起真 GS（CourseFactory copy 教學模版）
+         → CL 複製 GS＋SCRIPT 網址交區管理系統（首次密碼 1234）
+      ② CL 喺 APP 填晒：Input01 預算・Input02 節次職員・Input03 時間表・通告
+         ——全部直接寫入 GS（多職員同時用，防撞車）
+      ③ 區管理層批改 → tick 訓練班 GS 參數分頁「區會批准」格
+         → CL 見 ✔ 生成通告交區網頁管理員
+      ④ 掛載後成員系統報名自動流入 → 收生・點名・收支・評核・證書・完成報告
+
+區管理系統 scout-district-portal——只管連結＋紀錄（佢自己 SHEET 分頁）：
+      貼 訓練班 SCRIPT URL・訓練班 Drive（付款證明）・區網頁通告 URL
+      → 自動填寫內容、掛載到成員系統；批核時對接本系統 API 觀看訓練班資料
+
+成員系統 member-portal /training——填報名資料：
+      報名（addReg）→ 寫入訓練班「表格回應」＋入數紙截圖存 Drive
 ```
 
-## ✅ 第一階段功能（本 repo 現況）
+## ✅ 功能總覽（本 repo 現況）
 
 | 模組 | 內容 |
 |---|---|
