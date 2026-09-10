@@ -46,8 +46,9 @@ const Store = {
       existing.name = o.name || existing.name;
       existing.exec = o.exec || existing.exec;
       existing.key = o.key || existing.key;
+      existing.gsUrl = o.gsUrl || existing.gsUrl;
     } else {
-      this.config.courses.push({ id: id, name: o.name || '未命名訓練班', exec: o.exec || '', key: o.key || '', mock: !!o.mock, fresh: !!o.fresh, savedAt: new Date().toISOString() });
+      this.config.courses.push({ id: id, name: o.name || '未命名訓練班', exec: o.exec || '', key: o.key || '', gsUrl: o.gsUrl || '', mock: !!o.mock, fresh: !!o.fresh, savedAt: new Date().toISOString() });
     }
     this.saveConfig();
     return id;

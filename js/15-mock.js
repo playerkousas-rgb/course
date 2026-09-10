@@ -406,7 +406,10 @@ const MockAPI = {
       const reg = mockCourses();
       reg[key] = mockBlankState(nm, b);
       mockSaveCourses(reg);
-      return mockOk({ exec: 'mock', apiKey: key, courseId: key, courseName: nm, firstLogin: true });
+      return mockOk({
+        exec: 'mock', apiKey: key, courseId: key, courseName: nm, firstLogin: true,
+        url: 'https://docs.google.com/spreadsheets/d/mock-' + Date.now().toString(36),
+      });
     }
     if (action === 'getCourseProfile') {
       /* 連線測試用：唔驗 key 都回基本料（方便手快貼錯都知） */
@@ -428,16 +431,6 @@ const MockAPI = {
     if (action === 'auth') return mockPwAuth(state, b);
     if (action === 'setPassword') return mockPwSet(state, b);
     if (action === 'setPaymentCheck') return mockPaymentCheck(state, b);
-    if (action === 'finalizeCourse') {
-      /* CL 填好晒 → 生成 GS 交區(mock:標記 submitted;真流程由前端 call CourseFactory 再 batch 寫入) */
-      if (state.submitted && state.submitted.url) return mockErr('呢班已經生成咗 GS 交區（' + state.submitted.url + '）');
-      const nm = String((state.sheets[TAB.IN1][0] && state.sheets[TAB.IN1][0][1]) || '').trim();
-      if (!nm) return mockErr('請先填課程名稱');
-      state.submitted = { url: 'https://docs.google.com/spreadsheets/d/mock-' + Date.now().toString(36), at: new Date().toISOString() };
-      mockBumpRev(state, b.by || '');
-      mockPersist();
-      return mockOk({ exec: 'mock', apiKey: (b.apiKey || ''), url: state.submitted.url, courseName: nm });
-    }
     if (action === 'setCompletionRow') return mockSetCompletionRow(state, b);
     if (action === 'setCertRow') return mockSetCertRow(state, b);
     if (action === 'getCourseSheetRaw') {

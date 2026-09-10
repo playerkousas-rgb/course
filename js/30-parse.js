@@ -370,21 +370,19 @@ function parseCompletion(grid, regs) {
 }
 
 /* ── 掛載流程狀態 ──
-   本機草稿(mock 未交區) → 生成 GS 交區(submitted) → 區會批准(params.approved)
-   → 通告上網+貼 URL(noticeUrl) → 正式掛載成員系統報名(mounted)
-   真班(非 mock)一律當已交區;批准/通告網址係區管理層喺區管理系統寫,APP 只讀 ── */
+   新開班即刻起真 GS(區管理系統 SCRIPT 攞 URL 連結觀看批核)→
+   CL 填寫中(writing) → 區會批准(params.approved) → 通告上網+貼 URL(noticeUrl)
+   → 正式掛載成員系統報名(mounted)
+   批准/通告網址係區管理層喺區管理系統寫,APP 只讀 ── */
 function mountStatus(st) {
   st = st || Store.state;
   const course = Store.activeCourse();
-  const isMockDraft = !!(course && course.mock);
-  const sub = (st && st.raw && st.raw.submitted) || null;
-  const submitted = !isMockDraft || !!(sub && sub.url);
   const approved = !!(st && st.params && st.params.approved);
   const noticeUrl = (st && st.params && st.params.noticeUrl) || '';
-  const phase = !submitted ? 'draft' : (!approved ? 'submitted' : (!noticeUrl ? 'approved' : 'mounted'));
+  const phase = !approved ? 'writing' : (!noticeUrl ? 'approved' : 'mounted');
+  const gsUrl = (course && course.gsUrl) || (st && st.raw && st.raw.submitted && st.raw.submitted.url) || '';
   return {
-    phase: phase, submitted: submitted, approved: approved, noticeUrl: noticeUrl,
-    isMockDraft: isMockDraft, gsUrl: sub ? sub.url : '',
+    phase: phase, approved: approved, noticeUrl: noticeUrl, gsUrl: gsUrl,
     portalUrl: (st && st.params && st.params.portalUrl) || '',
   };
 }

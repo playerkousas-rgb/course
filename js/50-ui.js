@@ -193,12 +193,12 @@ const UI = {
       h('div', { class: 'foot-note' }, '共職員密碼預設 1234（進入後可改）・純前端，資料直接同每班 Google Sheet 對話')));
   },
 
-  /* ── 🆕 新開班（CL 起表:先本機草稿,填好晒先生成 GS 交區） ── */
+  /* ── 🆕 新開班（CL 起表:即刻起真 GS,區管理系統攞 URL 連結批核） ── */
   renderNewCourse: function () {
     const card = h('div', { class: 'card' });
     card.appendChild(h('div', { class: 'card-title' }, '🆕 新開班（CL 起表）'));
     card.appendChild(h('div', { class: 'row-sub' },
-      '開一個本機草稿班（唔會即刻開 GS）——喺 APP 填晒預算／節次／時間表／通告之後，撳「📤 生成 GS 交區」先至真正開 Google Sheet 交區管理層批核。批准後生成通告交區網頁管理員，上網貼返通告 URL 就正式掛載成員系統報名。'));
+      '填好基本資料即刻喺區 Drive 起一張新工作簿（照模版）——CL 喺 APP 填晒預算／節次／時間表／通告（全部寫入 GS），複製 GS 網址交區管理系統（SCRIPT 連結觀看批改）；區管理層批好 tick「區會批准」，之後先生成通告交區網頁管理員，上網貼返通告網址就正式掛載成員系統報名。'));
 
     const nmIn = h('input', { class: 'input', type: 'text', placeholder: '例：遠足專科徽章訓練班（必填）' });
     const edIn = h('input', { class: 'input', type: 'number', placeholder: '屆別，例：2（可選）' });
@@ -209,9 +209,11 @@ const UI = {
     const intakeIn = h('input', { class: 'input', type: 'number', placeholder: '預計收生人數（可選）' });
     const feeIn = h('input', { class: 'input', type: 'number', placeholder: '預計收費（元，可選）' });
     const clIn = h('input', { class: 'input', type: 'text', placeholder: '班領導人姓名（可選，建議填）' });
+    const factoryIn = h('input', { class: 'input', type: 'url', placeholder: 'https://script.google.com/macros/s/…/exec（區會 CourseFactory 網址）', value: (Store.config.factoryExec || '') });
+    const masterIn = h('input', { class: 'input', type: 'text', placeholder: '區會開班碼（向 ADC／區管理層攞）', value: (Store.config.factoryKey || '') });
     const msg = h('div', { class: 'form-msg' });
 
-    async function doCreate() {
+    async function doCreate(mockMode) {
       msg.textContent = ''; msg.className = 'form-msg';
       const nm = nmIn.value.trim();
       if (!nm) { msg.textContent = '請填課程名稱。'; msg.className = 'form-msg err'; return; }
@@ -220,14 +222,25 @@ const UI = {
         intake: intakeIn.value, fee: feeIn.value, clName: clIn.value.trim(),
       };
       let res;
-      try { res = await MockAPI.call('createCourse', payload); }
-      catch (e) { res = { ok: false, error: '後台錯誤：' + (e && e.message) }; }
-      if (!res || !res.ok) { msg.textContent = '開班失敗：' + ((res && res.error) || '未知錯誤'); msg.className = 'form-msg err'; return; }
+      if (mockMode) {
+        try { res = await MockAPI.call('createCourse', payload); }
+        catch (e) { res = { ok: false, error: '演示後台錯誤：' + (e && e.message) }; }
+      } else {
+        const fx = factoryIn.value.trim(), mk = masterIn.value.trim();
+        if (!fx || !mk) { msg.textContent = '請填區會開班網址同開班碼（向區管理層攞）。'; msg.className = 'form-msg err'; return; }
+        Store.config.factoryExec = fx; Store.config.factoryKey = mk; Store.saveConfig();
+        payload.masterKey = mk;
+        res = await apiCall('createCourse', payload, { exec: fx, key: mk });
+      }
+      if (!res || !res.ok) { msg.textContent = '起表失敗：' + ((res && res.error) || '未知錯誤'); msg.className = 'form-msg err'; return; }
       const d = res.data;
-      const id = Store.addCourse({ mock: true, id: d.apiKey, key: d.apiKey, name: nm, fresh: true });
+      const id = mockMode
+        ? Store.addCourse({ mock: true, id: d.apiKey, key: d.apiKey, name: nm, gsUrl: d.url || '', fresh: true })
+        : Store.addCourse({ exec: d.exec, key: d.apiKey, name: nm, gsUrl: d.url || '', fresh: true });
       Store.setActive(id);
-      toast('✅ 本機草稿班「' + nm + '」已開——首次密碼 1234，入去先改密碼，跟住去「開班文件」填晒所有嘢，填好先去儀表板「📤 生成 GS 交區」', 'ok');
+      toast('✅ GS 已起「' + nm + '」——首次密碼 1234，入去先改密碼，之後複製 GS 網址交區管理系統批核', 'ok');
       UI.render();
+      if (d.url) showGsUrlModal(d.url);
     }
 
     card.appendChild(h('div', { class: 'grid-2c' },
@@ -238,10 +251,12 @@ const UI = {
       h('div', { class: 'field' }, h('label', { class: 'flabel' }, '預計收生人數'), intakeIn),
       h('div', { class: 'field' }, h('label', { class: 'flabel' }, '預計收費（元）'), feeIn),
       h('div', { class: 'field' }, h('label', { class: 'flabel' }, '班領導人姓名'), clIn)));
+    card.appendChild(h('div', { class: 'field' }, h('label', { class: 'flabel' }, '區會開班網址（CourseFactory /exec）＋開班碼——連區會起表先要填；演示唔使'), factoryIn));
+    card.appendChild(h('div', { class: 'field' }, h('label', { class: 'flabel' }, '開班碼'), masterIn));
     card.appendChild(msg);
     card.appendChild(h('div', { class: 'btn-row' },
-      h('button', { class: 'btn btn-primary', onclick: () => doCreate() }, '📝 開本機草稿班'),
-      h('span', { class: 'row-sub' }, '填好晒先生成 GS（喺儀表板「🚢 掛載流程」）')));
+      h('button', { class: 'btn btn-primary', onclick: () => doCreate(true) }, '🚀 起表（演示）'),
+      h('button', { class: 'btn', onclick: () => doCreate(false) }, '🏛 連區會起表（即刻開真 GS）')));
     return card;
   },
 
@@ -350,9 +365,8 @@ const UI = {
   /* ── 主外框 ── */
   renderShell: function (app) {
     const course = Store.activeCourse();
-    const isDraft = !!(course && course.mock && Store.state && Store.state.raw && !(Store.state.raw.submitted && Store.state.raw.submitted.url));
     const headLeft = h('div', { class: 'head-left' },
-      h('div', { class: 'head-title', text: (isDraft ? '✏️ ' : course.mock ? '📊 ' : '🎓 ') + (Store.state && Store.state.info && Store.state.info.name ? Store.state.info.name : course.name) + (isDraft ? '（草稿）' : '') }),
+      h('div', { class: 'head-title', text: (course.mock ? '📊 ' : '🎓 ') + (Store.state && Store.state.info && Store.state.info.name ? Store.state.info.name : course.name) }),
       h('div', { class: 'head-staff', id: 'headStaff' }));
     const syncChip = h('button', { class: 'chip chip-sync', id: 'syncChip', title: '', onclick: () => this.syncDetail() }, '…');
     const saveChip = h('button', { class: 'chip chip-save', id: 'saveChip', onclick: () => this.showDraftsModal() }, '💾');
