@@ -69,7 +69,7 @@ function fmtShortDate(ymd) {
 
 /* ── 參數 W/X（區會常數） ── */
 function parseParamsWX(pw) {
-  const out = { portalUrl: '', fpsId: '', fpsName: '', districtWeb: '', approved: false, noticeUrl: '' };
+  const out = { portalUrl: '', fpsId: '', fpsName: '', districtWeb: '', approved: false };
   if (!Array.isArray(pw)) return out;
   for (let i = 0; i < pw.length; i++) {
     const row = pw[i] || [];
@@ -79,9 +79,8 @@ function parseParamsWX(pw) {
     else if (w.indexOf('FPS 識別碼') >= 0) out.fpsId = x;
     else if (w.indexOf('FPS 戶口') >= 0) out.fpsName = x;
     else if (w.indexOf('區會網址') >= 0) out.districtWeb = x;
-    /* 掛載流程狀態（區管理層喺區管理系統寫,APP 只讀） */
+    /* 區管理層批核訓練班寫呢格（經區管理系統/直接開 GS）;CL 喺 APP 見到 ✔ 先出通告 */
     else if (w.indexOf('區會批准') >= 0) out.approved = x === '✔' || x === '是' || x === 'TRUE';
-    else if (w.indexOf('通告網址') >= 0 || w.indexOf('通告 URL') >= 0) out.noticeUrl = x;
   }
   return out;
 }
@@ -370,19 +369,22 @@ function parseCompletion(grid, regs) {
 }
 
 /* ── 掛載流程狀態 ──
-   新開班即刻起真 GS(區管理系統 SCRIPT 攞 URL 連結觀看批核)→
-   CL 填寫中(writing) → 區會批准(params.approved) → 通告上網+貼 URL(noticeUrl)
-   → 正式掛載成員系統報名(mounted)
-   批准/通告網址係區管理層喺區管理系統寫,APP 只讀 ── */
+   訓練班系統連結三方:成員・管理・訓練班。
+   區管理系統只管連結+紀錄(佢自己 SHEET 分頁貼:訓練班 SCRIPT URL・訓練班 Drive
+   [付款證明]・區網頁通告 URL → 自動掛載成員系統)——同訓練班 GS 無關,APP 唔使理。
+   訓練班系統自己嘅職責:
+   - 批核:區管理層 tick 訓練班 GS 參數分頁「區會批准」格 → CL 見 ✔ 先生成通告
+   - 掛載信號:成員系統掛載後報名自動流入 RESP → 有報名 = 報名進行中 ── */
 function mountStatus(st) {
   st = st || Store.state;
   const course = Store.activeCourse();
+  const regCount = st && st.stats ? (st.stats.total || 0) : 0;
   const approved = !!(st && st.params && st.params.approved);
-  const noticeUrl = (st && st.params && st.params.noticeUrl) || '';
-  const phase = !approved ? 'writing' : (!noticeUrl ? 'approved' : 'mounted');
-  const gsUrl = (course && course.gsUrl) || (st && st.raw && st.raw.submitted && st.raw.submitted.url) || '';
+  const phase = regCount > 0 ? 'open' : (approved ? 'approved' : 'writing');
   return {
-    phase: phase, approved: approved, noticeUrl: noticeUrl, gsUrl: gsUrl,
+    phase: phase, approved: approved, regCount: regCount,
+    gsUrl: (course && course.gsUrl) || '',
+    scriptUrl: (course && course.exec && !course.mock) ? course.exec : '',
     portalUrl: (st && st.params && st.params.portalUrl) || '',
   };
 }

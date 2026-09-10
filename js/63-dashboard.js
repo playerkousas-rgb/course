@@ -3,20 +3,26 @@
  * ============================================================ */
 
 /* ============================================================
- * 掛載流程:本機草稿 → 生成 GS 交區 → 區會批准 → 通告上網 → 成員系統報名
+ * 掛載流程:起 GS 交區 → 區會批准(訓練班格)→ 通告上網 → 成員系統報名
+ * 區管理系統只管貼 URL 連結(SRIPT/Drive/通告)——佢哋內部嘢,APP 唔使理
  * ============================================================ */
 
-function showGsUrlModal(url) {
+function showGsUrlModal(gsUrl, scriptUrl) {
+  const line = (label, url) => h('div', { style: { margin: '10px 0', padding: '8px', background: '#f2f6f5', borderRadius: '8px', wordBreak: 'break-all', fontSize: '13px' } },
+    h('div', { style: { fontWeight: '700', fontSize: '12px', color: 'var(--ink-2)' } }, label),
+    url || '（起表時 CourseFactory 有回就會自動填）');
   const txt = h('div', { class: 'confirm-body' },
-    h('div', null, '複製以下 GS 網址交區管理系統——SCRIPT 連結之後就可以觀看訓練班資料（預算／節次／時間表／通告）嚟批改；批好 tick「區會批准」，APP 會自動見到：'),
-    h('div', { style: { margin: '10px 0', padding: '8px', background: '#f2f6f5', borderRadius: '8px', wordBreak: 'break-all', fontSize: '13px' } }, url || '（起表時 CourseFactory 有回就會自動填）'));
+    h('div', null, '複製以下網址交區管理系統（佢哋喺自己 SHEET 分頁貼呢啲 URL 就自動掛載成員系統）。區管理層批改之後會 tick 訓練班「區會批准」格——CL 喺 APP 見到 ✔ 就可以出通告：'),
+    line('📄 訓練班 GS（開班文件工作簿，用嚟觀看資料批改）', gsUrl),
+    scriptUrl ? line('⚙️ 訓練班 SCRIPT（/exec，區管理系統連結用）', scriptUrl) : null);
   const m2 = modal({
-    title: '📋 GS 網址（交區管理系統）',
+    title: '📋 網址（交區管理系統）',
     body: txt,
     actions: [
       h('button', { class: 'btn btn-primary', onclick: async function () {
-        try { await navigator.clipboard.writeText(url || ''); toast('📋 已複製——貼俾區管理層／區管理系統', 'ok'); } catch (e) { toast('複製失敗——手動揀文字複製', 'warn'); }
-      } }, '📋 複製網址'),
+        const all = (gsUrl || '') + (scriptUrl ? '\n' + scriptUrl : '');
+        try { await navigator.clipboard.writeText(all); toast('📋 已複製（GS＋SCRIPT）——貼俾區管理層／區管理系統', 'ok'); } catch (e) { toast('複製失敗——手動揀文字複製', 'warn'); }
+      } }, '📋 複製全部'),
       h('button', { class: 'btn', onclick: function () { m2.close(); } }, '完成'),
     ],
   });
@@ -36,25 +42,24 @@ regPage('dashboard', function (root) {
   const mkChip = (ok, t) => mChips.appendChild(h('span', { class: 'fchip' + (ok ? ' active' : '') }, (ok ? '✓ ' : '○ ') + t));
   mkChip(true, '① 起 GS・CL 填寫中');
   mkChip(ms.approved, '② 區會批准');
-  mkChip(!!ms.noticeUrl, '③ 通告上網');
-  mkChip(ms.phase === 'mounted', '④ 成員系統報名中');
+  mkChip(ms.phase === 'open', '③ 通告上網・掛載');
+  mkChip(ms.phase === 'open', '④ 成員系統報名中');
   mountCard.appendChild(mChips);
   const mRow = h('div', { class: 'btn-row', style: { marginTop: '10px', flexWrap: 'wrap' } });
   if (ms.phase === 'writing') {
-    mRow.appendChild(h('span', { class: 'row-sub' }, '📝 CL 填寫中——填好開班文件＋時間表＋通告之後，記得複製 GS 網址交區管理系統（SCRIPT 連結觀看批改）'));
-    if (ms.gsUrl) mRow.appendChild(h('button', { class: 'btn btn-primary btn-sm', onclick: function () { showGsUrlModal(ms.gsUrl); } }, '📋 複製 GS 網址交區'));
+    mRow.appendChild(h('span', { class: 'row-sub' }, '📝 CL 填寫中——填好開班文件＋時間表＋通告之後，複製網址（GS＋SCRIPT）交區管理系統；區管理層批好會 tick「區會批准」'));
+    if (ms.gsUrl || ms.scriptUrl) mRow.appendChild(h('button', { class: 'btn btn-primary btn-sm', onclick: function () { showGsUrlModal(ms.gsUrl, ms.scriptUrl); } }, '📋 複製網址交區'));
     if (course && course.mock) mRow.appendChild(h('button', { class: 'btn btn-sm', onclick: async function () {
       MockDemo.approveCourse(course.key); await Sync.refresh('silent'); toast('🧪 區管理層已 tick「區會批准」（演示）', 'ok'); UI.rerenderPage();
     } }, '🧪 模擬區會批准'));
   } else if (ms.phase === 'approved') {
-    mRow.appendChild(h('span', { class: 'row-sub' }, '✅ 區會已批准——去「通告」生成通告（列印／文字版）交區網頁管理員；上網後區管理層貼返「通告網址」'));
+    mRow.appendChild(h('span', { class: 'row-sub' }, '✅ 區會已批准——去「通告」生成通告（列印／文字版）交區網頁管理員；上網後區管理系統貼通告 URL 自動掛載，報名會流入呢度'));
     mRow.appendChild(h('button', { class: 'btn btn-primary btn-sm', onclick: function () { nav('notice'); } }, '📢 去通告'));
     if (course && course.mock) mRow.appendChild(h('button', { class: 'btn btn-sm', onclick: async function () {
-      MockDemo.setNoticeUrl(course.key); await Sync.refresh('silent'); toast('🧪 區管理層已貼通告網址（演示）——正式掛載成員系統', 'ok'); UI.rerenderPage();
-    } }, '🧪 模擬貼通告網址'));
+      const r = MockDemo.newReg(course.key); await Sync.refresh('silent'); toast('🧪 已模擬掛載——成員系統報名流入：' + r.name, 'ok'); UI.rerenderPage();
+    } }, '🧪 模擬掛載（報名流入）'));
   } else {
-    mRow.appendChild(h('span', { class: 'row-sub' }, '🌐 通告已上網，成員系統報名進行中'));
-    if (ms.noticeUrl) mRow.appendChild(h('a', { class: 'btn btn-sm', href: ms.noticeUrl, target: '_blank', rel: 'noopener' }, '📢 通告'));
+    mRow.appendChild(h('span', { class: 'row-sub' }, '🌐 通告已上網，成員系統報名進行中（' + ms.regCount + ' 位已報名）'));
     if (ms.portalUrl) mRow.appendChild(h('a', { class: 'btn btn-sm', href: ms.portalUrl, target: '_blank', rel: 'noopener' }, '🧒 成員系統報名'));
   }
   mountCard.appendChild(mRow);

@@ -180,8 +180,8 @@ async function main() {
   const ct2 = await MockAPI.call('setCertRow', { apiKey: KEY, name: '陳美琪', pickupDate: '2026-12-02', signed: '✔' });
   ok(ct2.ok && ct2.data.row > 7, '陳美琪開新行');
 
-  /* ══ 掛載流程（即刻起 GS 有 URL → 區會批准格 → 通告網址格） ══ */
-  section('掛載流程 區會批准/通告網址');
+  /* ══ 掛載流程（即刻起 GS 有 URL → 區會批准格 → 報名流入=掛載信號） ══ */
+  section('掛載流程 區會批准/報名流入');
   MockDemo.reset();
   const fc = await MockAPI.call('createCourse', { courseName: '遠足專章訓練班', clName: '陳大文' });
   const FK = fc.data.apiKey;
@@ -193,9 +193,10 @@ async function main() {
   MockDemo.approveCourse(FK);
   fRaw = (await MockAPI.call('getCourseSheetRaw', { apiKey: FK })).data;
   ok(fRaw.paramsWX.some((r) => r[0] === '區會批准' && r[1] === '✔'), '參數分頁「區會批准」✔');
-  MockDemo.setNoticeUrl(FK, 'https://example.hk/notice/x');
+  /* 模擬掛載:成員系統報名流入新班(RESP 多一行) */
+  const nr2 = MockDemo.newReg(FK);
   fRaw = (await MockAPI.call('getCourseSheetRaw', { apiKey: FK })).data;
-  ok(fRaw.paramsWX.some((r) => r[0] === '通告網址' && r[1] === 'https://example.hk/notice/x'), '「通告網址」已貼');
+  ok(fRaw.resp.length === 2 && fRaw.resp[1][RC['中文姓名'] - 1] === nr2.name, '報名流入（掛載信號）: ' + nr2.name);
   MockDemo.reset();
 
   /* ══ createCourse（CL 起表:新空白模版班,唔影響原有班） ══ */

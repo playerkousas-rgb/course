@@ -11,18 +11,17 @@ regPage('notice', function (root) {
   const get = (tab, r, c) => Store.effectiveCell(tab, r, c);
   const doc = composeNoticeDoc(get, st.params);
 
-  /* ── 掛載狀態（通告出街時機閘） ── */
+  /* ── 掛載狀態（通告出街時機閘:區會批准格 ✔ 先可以交區網頁管理員） ── */
   const ms = mountStatus(st);
   if (ms.phase === 'writing') {
     root.appendChild(h('div', { class: 'form-msg warn' },
-      '⏳ CL 填寫中／待區管理層批改——通告內容可以照草擬，但區管理系統 tick「區會批准」之前，唔好交區網頁管理員。'));
+      '⏳ CL 填寫中／待區管理層批改——通告內容可以照草擬，但區管理層未 tick「區會批准」之前，唔好交區網頁管理員。'));
   } else if (ms.phase === 'approved') {
     root.appendChild(h('div', { class: 'form-msg ok' },
-      '✅ 區會已批准——而家可以生成通告（下面 🖨 列印／📋 複製文字版）交區網頁管理員。上網之後提醒區管理層貼返「通告網址」，就正式掛載成員系統報名。'));
+      '✅ 區會已批准——而家可以生成通告（下面 🖨 列印／📋 複製文字版）交區網頁管理員。上網後區管理系統貼通告 URL 自動掛載，報名會流入呢度。'));
   } else {
     root.appendChild(h('div', { class: 'form-msg ok' },
-      '🌐 通告已上網、成員系統報名進行中：',
-      h('a', { href: ms.noticeUrl, target: '_blank', rel: 'noopener' }, ms.noticeUrl)));
+      '🌐 通告已上網、成員系統報名進行中（' + ms.regCount + ' 位已報名）。'));
   }
 
   /* ── 編輯面板 ── */
