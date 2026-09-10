@@ -372,3 +372,35 @@ textarea.input { resize: vertical; }
   .doc-page { box-shadow: none; max-width: none; margin: 0; padding: 0; border-radius: 0; }
   .qr-preview { display: none; }
 }
+
+/* ── 簽到/點名（65-attend） ── */
+.mk-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 14px; }
+.mk-row.mk-pending { border-left: 3px solid var(--amber, #e8a13a); }
+.mk-info { flex: 1; min-width: 0; }
+.mk-btns { display: flex; gap: 6px; flex: 0 0 auto; }
+.mk-btn { min-width: 52px; padding: 10px 8px; border-radius: 10px; border: 1.5px solid var(--line, #d5e0dd); background: #fff; font-size: 15px; font-weight: 600; color: var(--ink-2, #5b6b68); }
+.mk-btn:active { transform: scale(0.96); }
+.mk-btn.mk-✔.on { background: var(--green, #157a4e); border-color: var(--green, #157a4e); color: #fff; }
+.mk-btn.mk-✗.on { background: #d84c4c; border-color: #d84c4c; color: #fff; }
+.mk-btn.mk-遲.on { background: var(--amber, #e8a13a); border-color: var(--amber, #e8a13a); color: #fff; }
+.mk-btn.mk-假.on { background: #6b7f9e; border-color: #6b7f9e; color: #fff; }
+.att-table .th-sess { font-size: 11.5px; white-space: nowrap; }
+.att-cell { text-align: center; font-weight: 700; }
+.att-cell.att-✔ { color: var(--green, #157a4e); }
+.att-cell.att-✗ { color: #d84c4c; }
+.att-cell.att-遲 { color: var(--amber, #b97d0e); }
+.att-cell.att-假 { color: #6b7f9e; }
+.att-cell.att-none { color: #d0d8d6; }
+.text-red { color: #d84c4c; }
+
+/* ── 收支（66-finance） ── */
+.fin-form { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px 14px; margin: 10px 0; }
+@media (max-width: 620px) { .fin-form { grid-template-columns: repeat(2, 1fr); } }
+.td-num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.td-empty { color: #e2e8e6; text-align: right; }
+.fin-table th { white-space: nowrap; }
+.print-only { display: none; }
+@media print {
+  .print-only { display: block; }
+  .fin-screen { display: none !important; }   /* 收支頁列印用 doc-page 版，螢幕卡隱藏 */
+}

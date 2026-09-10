@@ -294,6 +294,55 @@ function composeNoticeDoc(get, params) {
 }
 
 /* ── 整包 parse ── */
+
+/* ── 出席表（Print_學員出席紀錄・coursev5 數碼版式） ──
+ * 第4行 E起＝每節日期；第5行表頭；第6行起學員（分組/編號/中文名/英文名 + E起剔號）
+ * 職員區：A 標記「職員出席」嗰行 +1 表頭（職位/姓名/稱謂）再 +1 起 ✔
+ * 讀取按名/編號對返（唔靠行位），名單有出入 → stale=true（前端提示對齊） */
+function parseAttend(attend, sessions, regs, staff) {
+  const out = { initialized: false, stale: false, byStudent: {}, byStaff: {}, sessions: (sessions || []).length };
+  if (!Array.isArray(attend) || attend.length < 6 || !out.sessions) return out;
+  const approved = regs.filter(r => r.status === 'approved');
+  if (!approved.length) return out;
+  const get = (r, c) => String((r && r[c - 1]) != null ? r[c - 1] : '').trim();
+  /* 學員區：第 6 行起掃 40 行 */
+  let onSheet = 0;
+  for (let i = 0; i < 40; i++) {
+    const r = attend[6 + i - 1];   /* 1-based 行 6+i → 0-based 索引 5+i */
+    if (!r) break;
+    if (get(r, 1).indexOf('職員出席') === 0) break;   /* 到職員區，學員掃描完 */
+    const no = get(r, 2), name = get(r, 3);
+    if (!no && !name) continue;
+    onSheet++;
+    let reg = no ? approved.filter(g => String(g.studentNo) === no)[0] : null;
+    if (!reg) reg = approved.filter(g => g.nameZh === name)[0] || null;
+    if (!reg) { out.stale = true; continue; }
+    const marks = [];
+    for (let j = 1; j <= out.sessions; j++) marks.push(get(r, 4 + j));
+    out.byStudent[reg.id] = marks;
+  }
+  if (onSheet > 0) out.initialized = true;
+  if (onSheet < approved.length) out.stale = true;
+  /* 職員區：搵標記行 */
+  for (let row = 6; row <= attend.length; row++) {
+    if (get(attend[row - 1], 1).indexOf('職員出席') === 0) {
+      for (let k = 0; k < 40; k++) {
+        const r = attend[row + 1 + k];   /* 表頭 +1 起係資料 */
+        if (!r) break;
+        const nm = get(r, 2);
+        if (!nm) continue;
+        const s2 = (staff || []).filter(x => x.name === nm)[0];
+        if (!s2) continue;
+        const marks = [];
+        for (let j = 1; j <= out.sessions; j++) marks.push(get(r, 4 + j));
+        out.byStaff[nm] = marks;
+      }
+      break;
+    }
+  }
+  return out;
+}
+
 function parseAll(raw) {
   raw = raw || {};
   const info = parseCourseInfo(raw.input01, raw.input02);
@@ -301,10 +350,11 @@ function parseAll(raw) {
   const staff = parseStaff(raw.input02);
   const params = parseParamsWX(raw.paramsWX);
   const regs = parseRegs(raw.resp);
+  const attend = parseAttend(raw.attend, sessions, regs, staff);
   const noticeEdits = parseNoticeEdits(raw.notice);
   const leader = staff.filter(s => s.role === '班領導人')[0] || null;
   return {
-    raw, info, sessions, staff, params, regs, noticeEdits, leader,
+    raw, info, sessions, staff, params, regs, noticeEdits, leader, attend,
     stats: regStats(regs, info.quota),
     rev: raw.rev || 0, revBy: raw.revBy || '', revSavedAt: raw.revSavedAt || '',
     pulledAt: raw.pulledAt || '',

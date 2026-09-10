@@ -153,6 +153,18 @@ function mockSeedState() {
   for (let r = 8; r <= 42; r++) mockSet(IN4, r, 1, r - 7);
   mockSet(IN4, 8, 2, 120); mockSet(IN4, 8, 11, '10月17日茶點（24人×$5）');
 
+  /* Print_學員出席紀錄（coursev5 數碼版式：第4行日期、第5行表頭、6行起學員、職員區喺 28 行） */
+  const ATT = mockGrid(64, 16);
+  mockSet(ATT, 4, 5, '2026-10-17'); mockSet(ATT, 4, 6, '2026-10-24'); mockSet(ATT, 4, 7, '2026-11-01');
+  mockSet(ATT, 5, 1, '分組'); mockSet(ATT, 5, 2, '學員編號'); mockSet(ATT, 5, 3, '中文姓名'); mockSet(ATT, 5, 4, '英文姓名');
+  mockSet(ATT, 6, 1, '第一組'); mockSet(ATT, 6, 2, 1); mockSet(ATT, 6, 3, '王小明'); mockSet(ATT, 6, 4, 'Wong Siu Ming'); mockSet(ATT, 6, 5, '✔');
+  mockSet(ATT, 7, 1, '第二組'); mockSet(ATT, 7, 2, 2); mockSet(ATT, 7, 3, '李嘉俊'); mockSet(ATT, 7, 4, 'Lee Ka Chun'); mockSet(ATT, 7, 5, '✔');
+  mockSet(ATT, 8, 1, '第二組'); mockSet(ATT, 8, 2, 3); mockSet(ATT, 8, 3, '陳美琪'); mockSet(ATT, 8, 4, 'Chan Mei Kei'); mockSet(ATT, 8, 5, '✗');
+  mockSet(ATT, 28, 1, '職員出席（服務時數自動計）');
+  mockSet(ATT, 29, 1, '職位'); mockSet(ATT, 29, 2, '姓名'); mockSet(ATT, 29, 3, '稱謂');
+  mockSet(ATT, 30, 1, '班領導人'); mockSet(ATT, 30, 2, '陳大文'); mockSet(ATT, 30, 3, '先生'); mockSet(ATT, 30, 5, '✔');
+  mockSet(ATT, 31, 1, '副班領導人'); mockSet(ATT, 31, 2, '李美芬'); mockSet(ATT, 31, 3, '小姐');
+
   const st = {
     rev: 0, savedAt: '', by: '',
     sheets: {},
@@ -160,6 +172,7 @@ function mockSeedState() {
   st.sheets[TAB.IN1] = IN1; st.sheets[TAB.IN2] = IN2;
   st.sheets[TAB.IN4] = IN4; st.sheets[TAB.RESP] = RESP; st.sheets[TAB.NOTICE] = NOTICE;
   st.sheets[TAB.IN3] = mockGrid(32, 6);
+  st.sheets[TAB.ATTEND] = ATT;
   return st;
 }
 
@@ -271,6 +284,7 @@ const MockAPI = {
           ['區會網址', 'www.skwscout.org.hk'],
         ],
         notice: state.sheets[TAB.NOTICE],
+        attend: state.sheets[TAB.ATTEND] || [],
         accept: [], finance: [], completion: mockGrid(32, 6), cert: mockGrid(30, 7), subsidy: [],
         pulledAt: new Date().toISOString(),
         rev: state.rev, revSavedAt: state.savedAt, revBy: state.by,

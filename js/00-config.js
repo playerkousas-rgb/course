@@ -22,6 +22,7 @@ const TAB = {
   RESP: '表格回應',
   PARAM: '參數',
   NOTICE: 'Print_通告',
+  ATTEND: 'Print_學員出席紀錄',
 };
 
 /* ── 表格回應欄（跟模版 44 欄） ── */
@@ -194,7 +195,7 @@ const NOTICE_REMARK_DEFAULTS = [
 /* raw dump key → 分頁名（getCourseSheetRaw 回傳嘅欄位） */
 const RAW_TAB_MAP = {
   input01: TAB.IN1, input02: TAB.IN2, input03: TAB.IN3, input04: TAB.IN4,
-  resp: TAB.RESP, notice: TAB.NOTICE,
+  resp: TAB.RESP, notice: TAB.NOTICE, attend: TAB.ATTEND,
 };
 
 /* ── localStorage 鍵 ── */

@@ -16,7 +16,7 @@
 | `auth` | `password` | `{role:'staff'\|'admin',firstLogin:bool,v:'5.0.0'}` | 解鎖驗證（coursev5+）。錯 5 次 → 後端鎖 10 分鐘 |
 | `setPassword` | `oldPassword,newPassword` | `{saved}` | 改共職員密碼（全體生效；新密碼 ≥4 位、≠1234、唔可以有 `:`） |
 | `setPaymentCheck` | `id`(=時間戳記),`verified`,`by` | `{saved,row,verified}` | **區管理系統用**：核對區帳戶後 tick「已核對收款」；identity 定位、唔 bump rev、自動補表頭 |
-| `getCourseSheetRaw` | — | `{input01,input02,input03,input04,resp,paramsWX,notice,accept,finance,completion,cert,subsidy,pulledAt,rev,revSavedAt,revBy}` | 主同步（15 秒輪詢）；rev 供樂觀鎖 |
+| `getCourseSheetRaw` | — | `{input01,input02,input03,input04,resp,paramsWX,notice,attend,accept,finance,completion,cert,subsidy,pulledAt,rev,revSavedAt,revBy}` | 主同步（15 秒輪詢）；rev 供樂觀鎖；`attend`（Print_學員出席紀錄）係 coursev5 加嘅 dump |
 | `getCourseProfile` | — | 課程結構資料 | 連線測試＋解鎖頁職員名單 |
 | `setRegStatus` | `id`(=時間戳記),`status`(pending/approved/rejected/cancelled),`reviewer` | `{saved,id,status}` | 收生：接納/拒絕/取消。**唔檢查 rev、唔 bump rev**（identity 定位，安全） |
 | `saveCourseBatch` | `cells[{tab,row,col,value}]`,`baseRev`,`by` | `{saved,rev,savedAt,updated,skippedTabs}` | 批次寫格（開班文件／通告／分組） |

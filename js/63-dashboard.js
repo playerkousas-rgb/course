@@ -15,6 +15,8 @@ regPage('dashboard', function (root) {
     { ok: !!(info.deadline && info.publish), label: '④ 截止報名／公佈取錄日', route: 'setup' },
     { ok: st.stats.approved > 0, label: '⑤ 收生 — 確認取錄（' + st.stats.approved + '/' + (info.quota || '?') + '）', route: 'intake' },
     { ok: st.stats.approved > 0 && st.regs.filter(r => r.status === 'approved').every(r => r.group), label: '⑥ 學員分組', route: 'roster' },
+    { ok: !!(st.attend && st.attend.initialized), label: '⑦ 出席表對齊（可以開始點名）', route: 'attend' },
+    { ok: financeSummary(st).used > 0, label: '⑧ 收支記錄（有支出入帳）', route: 'finance' },
   ];
   const done = steps.filter(s => s.ok).length;
 
@@ -93,6 +95,17 @@ regPage('dashboard', function (root) {
     else if (days <= 7) todos.push({ icon: '📅', txt: '報名 ' + days + ' 日後截止（' + fmtCNDate(info.deadline) + '）', act: () => nav('intake') });
   }
   if (s.quota && s.approved > s.quota) todos.push({ icon: '⚠️', txt: '已超收：' + s.approved + '/' + s.quota + '——考慮取消部分接納', act: () => nav('intake'), urgent: true });
+  (function () {
+    if (!st.attend || !st.attend.initialized) return;
+    const today = new Date();
+    const iso = today.getFullYear() + '-' + String(today.getMonth() + 1).padStart(2, '0') + '-' + String(today.getDate()).padStart(2, '0');
+    const sess = st.sessions.filter(x => x.date === iso);
+    if (!sess.length) return;
+    const approved = st.regs.filter(r => r.status === 'approved');
+    const idx = st.sessions.indexOf(sess[0]);
+    const done = approved.filter(r => (st.attend.byStudent[r.id] || [])[idx] !== '' && (st.attend.byStudent[r.id] || [])[idx] !== undefined).length;
+    if (done < approved.length) todos.push({ icon: '✍️', txt: '今日（第 ' + (idx + 1) + ' 節）仲有 ' + (approved.length - done) + ' 位未點名', act: () => { _attendSess = idx + 1; nav('attend'); }, urgent: true });
+  })();
   if (!todos.length) todos.push({ icon: '🎉', txt: '冇待辦事項——一切正常', done: true });
   const todoCard = h('div', { class: 'card' },
     h('div', { class: 'card-title-row' }, h('div', { class: 'card-title' }, '🔔 職員待辦'),

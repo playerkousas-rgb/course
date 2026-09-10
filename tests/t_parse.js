@@ -65,9 +65,18 @@ notice[23] = ['', '費 用：', 'HK$60'];
 notice[30] = ['', '服 裝：', '整齊制服'];
 notice[42] = ['', '', '', '', '陳大文'];
 
+/* 出席表 grid（coursev5 數碼版式；2 節） */
+const att = [];
+att[3] = ['', '', '', '', '2026-10-17', '2026-10-24'];           /* R4 日期 */
+att[4] = ['分組', '學員編號', '中文姓名', '英文姓名'];               /* R5 表頭 */
+att[5] = ['第一組', 1, '王小明', 'Wong Siu Ming', '✔', '遲'];      /* R6 學員 */
+att[27] = ['職員出席（服務時數自動計）'];                           /* R28 職員區標記 */
+att[28] = ['職位', '姓名', '稱謂'];                                /* R29 表頭 */
+att[29] = ['班領導人', '陳大文', '先生', '', '✔', ''];             /* R30 職員 */
+
 const raw = {
   input01: in1, input02: in2, input03: [], input04: [],
-  resp: resp,
+  resp: resp, attend: att,
   paramsWX: [
     ['區會常數（唔好改名）', ''],
     ['成員系統報名網址', 'https://portal.test/training'],
@@ -97,6 +106,11 @@ ok(p.regs[0].pcheck, '已核對收款 ✔');
 ok(p.regs[0].pcBy === '區會財務', '核對人');
 ok(p.regs[0].sta, 'STA 正本已交');
 ok(p.regs[1].pcheck === false, '第二筆未核對收款 → false');
+section('出席表 parseAttend');
+ok(p.attend.initialized, '出席表已初始化');
+ok(p.attend.stale === false, '名單齊（唔 stale）');
+eq(p.attend.byStudent[p.regs[0].id], ['✔', '遲'], '王小明兩節剔號');
+eq(p.attend.byStaff['陳大文'], ['✔', ''], '陳大文第1節簽到');
 eq(p.regs[1].status, 'pending', '無狀態→pending');
 eq(p.stats.pending, 1, '統計：待批 1');
 eq(p.rev, 7, 'rev');

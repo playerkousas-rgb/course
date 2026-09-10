@@ -28,7 +28,7 @@
    （如果 doPost 係 if/else 寫法，就照原有格式加同等兩句）
 3. **部署**：部署 → 管理部署 → ✏️ 編輯 → 建立新版本
 4. **欄位上限檢查**：`setCourseCells`／`saveCourseBatch` 嘅座標驗證如果限制欄號上限（例如 26/30），改做 **60**（新欄去到 AW=49）
-5. （選配，二階段出席用）`getCourseSheetRaw_` 嘅 dump 清單加一行：
+5. `getCourseSheetRaw_` 嘅 dump 清單加一行（簽到/點名頁要讀）：
    ```js
    attend: dump('Print_學員出席紀錄'),
    ```
