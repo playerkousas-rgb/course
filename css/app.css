@@ -162,6 +162,7 @@ textarea.input { resize: vertical; }
 .tag { display: inline-block; background: var(--gray-bg); color: var(--ink-2); border-radius: 999px; font-size: 11px; padding: 2px 8px; margin-left: 4px; }
 .tag-blue { background: var(--blue-bg); color: var(--blue); }
 .tag-amber { background: var(--amber-bg); color: #92600a; }
+.tag-green { background: var(--green-bg, #e3f6ee); color: var(--green, #157a4e); }
 
 .row-item { display: flex; align-items: center; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--line); }
 .row-item:last-child { border-bottom: none; }
@@ -314,6 +315,18 @@ textarea.input { resize: vertical; }
 .doc-sign-title { font-weight: 700; border-bottom: 1px solid #000; display: inline-block; padding: 0 28px 2px; }
 .doc-sign-name { margin-top: 14px; font-size: 16px; letter-spacing: 2px; }
 .doc-sign-deputy { font-size: 13px; margin-top: 2px; }
+/* 名單類文件（取錄/參加/緊急聯絡） */
+.doc-center { text-align: center; }
+.doc-h2 { font-size: 18px; font-weight: 700; letter-spacing: 6px; margin: 4px 0 18px; }
+.doc-page .data-table { width: 100%; border-collapse: collapse; }
+.doc-page .data-table th, .doc-page .data-table td { border: 1px solid #000; padding: 4px 10px; font-size: 13.5px; }
+.doc-page .data-table th { background: #f2f2f2; }
+.doc-note { margin: 18px 0 26px; font-size: 13px; line-height: 1.8; }
+.doc-note + .doc-sign { text-align: right; font-size: 15px; margin-top: 26px; }
+.group-row td { background: #eef5f3; font-weight: 700; }
+/* 待辦 */
+.step.urgent .step-dot { border-color: #e05d5d; }
+.step.urgent .step-label { font-weight: 700; }
 
 /* ── Modal ── */
 .modal-ov {

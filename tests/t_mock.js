@@ -132,6 +132,23 @@ async function main() {
   a = await MockAPI.call('auth', { apiKey: KEY, password: '1234' });
   ok(a.ok && a.data.firstLogin === true, 'resetPw → 回復預設 1234');
 
+  /* ══ setPaymentCheck（區管理系統核對收款） ══ */
+  section('setPaymentCheck 收款核對');
+  MockDemo.reset();
+  let pcRaw = await MockAPI.call('getCourseSheetRaw', { apiKey: KEY });
+  let pcRow = pcRaw.data.resp[1];
+  const pcId = pcRow[RC['時間戳記'] - 1];
+  let pc = await MockAPI.call('setPaymentCheck', { apiKey: KEY, id: pcId, by: '區會財務' });
+  ok(pc.ok && pc.data.verified === true, '核對收款 ok（identity 定位）');
+  pcRaw = await MockAPI.call('getCourseSheetRaw', { apiKey: KEY });
+  pcRow = pcRaw.data.resp[1];
+  ok(pcRow[RC['已核對收款'] - 1] === '✔' && pcRow[RC['核對人'] - 1] === '區會財務', 'AS/AT 已寫');
+  const pcRev = pcRaw.data.rev;
+  pc = await MockAPI.call('setPaymentCheck', { apiKey: KEY, id: 'not-exist', by: 'x' });
+  ok(!pc.ok, '搵唔到報名 → 拒絕');
+  pcRaw = await MockAPI.call('getCourseSheetRaw', { apiKey: KEY });
+  ok(pcRaw.data.rev === pcRev, 'setPaymentCheck 唔 bump rev（同 GAS 語義一致）');
+
   done();
 }
 main().catch((e) => { console.error(e); process.exit(1); });

@@ -13,18 +13,22 @@
 | 後備管理員 | 密碼格輸入「帳號:密碼」登入／重設——**只寫喺 `Auth.gs` 頂部常數，其他地方一律唔顯示** |
 | 防爆 | 同一課程錯 5 次 → 鎖 10 分鐘（CacheService） |
 | 版本識別 | `auth` 回應帶 `v:'5.0.0'`；前端亦可偵測「有冇 auth action」分辨新舊後端 |
+| `setPaymentCheck` action | 區管理系統核對區帳戶後 tick「表格回應」AS-AU（已核對收款/核對人/核對時間）；identity 定位、唔 bump rev、首次自動補表頭 |
+| STA 收表 | AV/AW 兩欄（已交表格正本✔/收表記錄）——班職員 APP 收表時經 `saveCourseBatch` 寫，唔使另外加 action |
 
 ## 安裝步驟（每班 GAS 專案，或改完模版之後全區生效）
 
-1. **加檔案**：GAS 專案左欄「＋」→ 新增 `Auth.gs` → 貼入本 repo `apps-script/Auth.gs` 全文
+1. **加檔案**：GAS 專案左欄「＋」→ 新增 `Auth.gs` **同 `PaymentCheck.gs`** → 貼入本 repo `apps-script/` 對應檔全文
 2. **加路由**：喺 `Code.gs.course.js` 嘅 `doPost` 分發處（**驗完 apiKey 之後**，同其他 case 一齊）加：
    ```js
-   case 'auth':        return doAuth_(msg);
-   case 'setPassword': return doSetPassword_(msg);
+   case 'auth':            return doAuth_(msg);
+   case 'setPassword':     return doSetPassword_(msg);
+   case 'setPaymentCheck': return doSetPaymentCheck_(msg);
    ```
    （如果 doPost 係 if/else 寫法，就照原有格式加同等兩句）
 3. **部署**：部署 → 管理部署 → ✏️ 編輯 → 建立新版本
-4. （選配，二階段出席用）`getCourseSheetRaw_` 嘅 dump 清單加一行：
+4. **欄位上限檢查**：`setCourseCells`／`saveCourseBatch` 嘅座標驗證如果限制欄號上限（例如 26/30），改做 **60**（新欄去到 AW=49）
+5. （選配，二階段出席用）`getCourseSheetRaw_` 嘅 dump 清單加一行：
    ```js
    attend: dump('Print_學員出席紀錄'),
    ```

@@ -108,16 +108,18 @@ function mockSeedState() {
     put('批核人', o.reviewer || ''); put('批核時間', o.reviewedAt || '');
     put('接納', o.status === 'approved' ? '✔' : (o.status === 'rejected' || o.status === 'cancelled' ? '✗' : ''));
     put('分組', o.group || '');
+    put('已核對收款', o.pcheck ? '✔' : ''); put('核對人', o.pcheck ? (o.pcBy || '區會財務（演示）') : '');
+    put('核對時間', o.pcheck ? (o.pcAt || '2026-09-26T09:00:00.000Z') : '');
     put('_courseId', 'demo-course'); put('_courseTitle', '攝影專科徽章訓練班');
     put('_section', '童軍'); put('_badgeCode', 'SPG'); put('_ref', o.ref);
     return r;
   };
   [
-    { ts: '2026-09-20T08:15:00.000Z', email: 'siuming@example.hk', nameZh: '王小明', nameEn: 'Wong Siu Ming', gender: '男', dob: '2008-04-12', troop: '港島第82旅', scoutId: '2026082012', phone: '61234567', gName: '王陳秀珍', gPhone: '91230001', payer: '王太太', status: 'approved', reviewer: '陳大文', reviewedAt: '2026-09-22T10:00:00.000Z', group: '第一組', ref: 'CRS-20260920-1234' },
-    { ts: '2026-09-20T09:02:00.000Z', email: 'kaChun@example.hk', nameZh: '李嘉俊', nameEn: 'Lee Ka Chun', gender: '男', dob: '2008-11-03', troop: '港島第82旅', scoutId: '2026082035', phone: '61234568', gName: '李先生', gPhone: '91230002', payer: '李先生', status: 'approved', reviewer: '陳大文', reviewedAt: '2026-09-22T10:01:00.000Z', group: '第二組', ref: 'CRS-20260920-2345' },
+    { ts: '2026-09-20T08:15:00.000Z', email: 'siuming@example.hk', nameZh: '王小明', nameEn: 'Wong Siu Ming', gender: '男', dob: '2008-04-12', troop: '港島第82旅', scoutId: '2026082012', phone: '61234567', gName: '王陳秀珍', gPhone: '91230001', payer: '王太太', status: 'approved', reviewer: '陳大文', reviewedAt: '2026-09-22T10:00:00.000Z', group: '第一組', pcheck: true, ref: 'CRS-20260920-1234' },
+    { ts: '2026-09-20T09:02:00.000Z', email: 'kaChun@example.hk', nameZh: '李嘉俊', nameEn: 'Lee Ka Chun', gender: '男', dob: '2008-11-03', troop: '港島第82旅', scoutId: '2026082035', phone: '61234568', gName: '李先生', gPhone: '91230002', payer: '李先生', status: 'approved', reviewer: '陳大文', reviewedAt: '2026-09-22T10:01:00.000Z', group: '第二組', pcheck: true, ref: 'CRS-20260920-2345' },
     { ts: '2026-09-21T11:40:00.000Z', email: 'meikei@example.hk', nameZh: '陳美琪', nameEn: 'Chan Mei Kei', gender: '女', dob: '2009-01-25', troop: '港島第215旅', scoutId: '2026082177', phone: '61234569', gName: '陳太', gPhone: '91230003', payer: '陳太', status: 'approved', reviewer: '李美芬', reviewedAt: '2026-09-23T09:00:00.000Z', group: '第二組', receipt: '是', ref: 'CRS-20260921-3456' },
     { ts: '2026-09-21T14:22:00.000Z', email: 'kahojacob@example.hk', nameZh: '張家豪', nameEn: 'Cheung Ka Ho', gender: '男', dob: '2008-07-18', troop: '港島第12旅', scoutId: '2026080119', phone: '61234570', status: 'pending', ref: 'CRS-20260921-4567' },
-    { ts: '2026-09-22T07:55:00.000Z', email: 'wingyan@example.hk', nameZh: '黃詠恩', nameEn: 'Wong Wing Yan', gender: '女', dob: '2009-03-08', troop: '港島第82旅', scoutId: '2026082042', phone: '61234571', status: 'pending', extra: '校內攝影學會成員，曾獲學界攝影比賽亞軍', ref: 'CRS-20260922-5678' },
+    { ts: '2026-09-22T07:55:00.000Z', email: 'wingyan@example.hk', nameZh: '黃詠恩', nameEn: 'Wong Wing Yan', gender: '女', dob: '2009-03-08', troop: '港島第82旅', scoutId: '2026082042', phone: '61234571', status: 'pending', extra: '校內攝影學會成員，曾獲學界攝影比賽亞軍', pcheck: true, ref: 'CRS-20260922-5678' },
     { ts: '2026-09-22T16:30:00.000Z', email: 'tszechin@example.hk', nameZh: '周子軒', nameEn: 'Chau Tsz Hin', gender: '男', dob: '2008-09-30', troop: '東九龍第54旅', scoutId: '2026E54033', phone: '61234572', district: '觀塘', status: 'pending', note: '跨區報名，請導師留意', ref: 'CRS-20260922-6789' },
     { ts: '2026-09-23T10:05:00.000Z', email: 'sintung@example.hk', nameZh: '吳倩彤', nameEn: 'Ng Sin Tung', gender: '女', dob: '2009-06-14', troop: '港島第215旅', scoutId: '2026082183', phone: '61234573', status: 'pending', ref: 'CRS-20260923-7890' },
     { ts: '2026-09-23T18:44:00.000Z', email: 'howin@example.hk', nameZh: '鄭浩然', nameEn: 'Cheng Ho Yin', gender: '男', dob: '2008-02-21', troop: '港島第27旅', scoutId: '2026080266', phone: '61234574', status: 'rejected', reviewer: '陳大文', reviewedAt: '2026-09-24T09:12:00.000Z', note: '未附入數紙，已通知補交但截止前未收到', ref: 'CRS-20260923-8901' },
@@ -255,6 +257,7 @@ const MockAPI = {
     }
     if (action === 'auth') return mockPwAuth(state, b);
     if (action === 'setPassword') return mockPwSet(state, b);
+    if (action === 'setPaymentCheck') return mockPaymentCheck(state, b);
     if (action === 'getCourseSheetRaw') {
       return mockOk({
         input01: state.sheets[TAB.IN1], input02: mockDumpIn2(state),
@@ -405,6 +408,22 @@ function mockPwSet(state, b) {
   return mockOk({ saved: true });
 }
 
+/* setPaymentCheck（區管理系統核對收款用；同 setRegStatus 一樣 identity 定位、唔 bump rev） */
+function mockPaymentCheck(state, b) {
+  const resp = state.sheets[TAB.RESP];
+  let idx = -1;
+  for (let i = 1; i < resp.length; i++) {
+    if (String(resp[i][RC_ID - 1]).trim() === String(b.id).trim()) { idx = i; break; }
+  }
+  if (idx < 0) return mockErr('找不到該報名');
+  const ok = b.verified !== false;
+  resp[idx][RC['已核對收款'] - 1] = ok ? '✔' : '';
+  resp[idx][RC['核對人'] - 1] = ok ? (b.by || '') : '';
+  resp[idx][RC['核對時間'] - 1] = ok ? new Date().toISOString() : '';
+  mockPersist();
+  return mockOk({ saved: true, id: b.id, verified: ok });
+}
+
 /* saveCourseBatch 核心（setCourseCells 同一條路） */
 function mockBatchWrite(state, b) {
   const cells = b.cells || [];
@@ -415,7 +434,7 @@ function mockBatchWrite(state, b) {
     const tab = String(c.tab || '');
     if (MOCK_WRITABLE_TABS.indexOf(tab) < 0) continue;
     const r = Number(c.row), col = Number(c.col);
-    if (!r || !col || r < 1 || col < 1 || r > 500 || col > 30) return mockErr('格座標不正確（第 ' + (i + 1) + ' 格）');
+    if (!r || !col || r < 1 || col < 1 || r > 500 || col > 60) return mockErr('格座標不正確（第 ' + (i + 1) + ' 格）');
   }
   const stale = mockCheckBaseRev(state, b.baseRev);
   if (stale) return stale;
@@ -475,6 +494,21 @@ const MockDemo = {
     return { name: p.nameZh, ts };
   },
   reset: mockReset,
+  /* 模擬區管理系統核對收款（tick 下一筆未核對嘅待批報名） */
+  paymentCheck: function () {
+    const state = mockLoad();
+    const resp = state.sheets[TAB.RESP];
+    for (let i = 1; i < resp.length; i++) {
+      if (String(resp[i][RC_STATUS - 1]) === 'pending' && String(resp[i][RC['已核對收款'] - 1] || '') !== '✔') {
+        resp[i][RC['已核對收款'] - 1] = '✔';
+        resp[i][RC['核對人'] - 1] = '區會財務（演示）';
+        resp[i][RC['核對時間'] - 1] = new Date().toISOString();
+        mockPersist();
+        return { name: String(resp[i][RC['中文姓名'] - 1] || ''), ts: String(resp[i][RC_ID - 1]) };
+      }
+    }
+    return null;
+  },
   /* 設定 mock 管理員帳號（測試「帳號:密碼」登入用；真後備帳號只寫喺 GS Auth.gs） */
   setAdmin: function (user, pw) { const s = mockLoad(); s.admin = { user: user, pw: pw }; mockPersist(); },
   /* 重設密碼狀態（等於 GS 刪 COURSE_PW_HASH → 回復 1234） */

@@ -36,6 +36,8 @@ const RESP_HEADERS = [
   '已繳付訓練班費用截圖', '已填妥之表格截圖(上課時需交回正本)', '是否需要收據', '備註',
   '接納', '旅號', 'Region flag', 'Troop flag', 'Seq in group', 'Sequence Ref', '學員編號', '分組',
   '審批狀態', '批核人', '批核時間', '_courseId', '_courseTitle', '_section', '_badgeCode', '_ref',
+  /* coursev5 新增（AS-AW）：45-47 由區管理系統 setPaymentCheck 寫；48-49 由本 APP 職員收表時寫 */
+  '已核對收款', '核對人', '核對時間', '已交表格正本（STA）', '收表記錄',
 ];
 /* 1-based 欄號（對應 saveCourseBatch cells 座標） */
 const RC = {};

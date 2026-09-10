@@ -81,7 +81,29 @@ regPage('dashboard', function (root) {
     leader ? h('div', { class: 'leader-line' }, '🏅 班領導人：' + esc(leader.name) + esc(leader.title) + (leader.qual ? '（' + esc(leader.qual) + '）' : '') + (leader.phone ? '・' + esc(leader.phone) : '')) : h('div', { class: 'row-sub' }, '未填班領導人'),
     h('div', { class: 'mini-list' }, st.staff.filter(x => x.name && x.role !== '班領導人').slice(0, 8).map(x => h('div', { class: 'row-sub' }, esc(x.role) + '・' + esc(x.name)))));
 
+  /* ── 🔔 待辦提醒 ── */
+  const todos = [];
+  if (s.pending) todos.push({ icon: '⏳', txt: s.pending + ' 筆報名待批（' + (s.pendingUnpaid || 0) + ' 筆未核對收款）', act: () => { _intakeFilter = 'pending'; nav('intake'); }, urgent: true });
+  if (s.approvedUnpaid) todos.push({ icon: '💰', txt: s.approvedUnpaid + ' 位已取錄學員，區會仲未核對收款', act: () => { _intakeFilter = 'unpaid'; nav('intake'); } });
+  if (s.approvedNoSta) todos.push({ icon: '📄', txt: s.approvedNoSta + ' 位學員未交 STA 表格正本（上課時收）', act: () => nav('roster') });
+  if (s.groupsInUse && s.ungrouped) todos.push({ icon: '👥', txt: s.ungrouped + ' 位取錄學員未分組', act: () => nav('roster') });
+  if (info.deadline) {
+    const days = Math.ceil((new Date(info.deadline + 'T23:59:59+08:00').getTime() - Date.now()) / 86400000);
+    if (days < 0) todos.push({ icon: '📅', txt: '報名已截止（' + fmtCNDate(info.deadline) + '）——記得公佈取錄' });
+    else if (days <= 7) todos.push({ icon: '📅', txt: '報名 ' + days + ' 日後截止（' + fmtCNDate(info.deadline) + '）', act: () => nav('intake') });
+  }
+  if (s.quota && s.approved > s.quota) todos.push({ icon: '⚠️', txt: '已超收：' + s.approved + '/' + s.quota + '——考慮取消部分接納', act: () => nav('intake'), urgent: true });
+  if (!todos.length) todos.push({ icon: '🎉', txt: '冇待辦事項——一切正常', done: true });
+  const todoCard = h('div', { class: 'card' },
+    h('div', { class: 'card-title-row' }, h('div', { class: 'card-title' }, '🔔 職員待辦'),
+      todos.some(t => t.urgent) ? h('span', { class: 'badge-num pulse' }, '!') : null),
+    h('div', { class: 'steps' }, todos.map(t => h('button', {
+      class: 'step todo' + (t.done ? ' ok' : '') + (t.urgent ? ' urgent' : ''),
+      onclick: t.act || null,
+    }, h('span', { class: 'step-dot' }, t.icon), h('span', { class: 'step-label' }, t.txt)))));
+
   root.appendChild(progress);
+  root.appendChild(todoCard);
   root.appendChild(h('div', { class: 'grid-2' }, courseCard, h('div', null, intakeCard)));
   root.appendChild(h('div', { class: 'grid-2' }, sessCard, staffCard));
 });

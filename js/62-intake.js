@@ -13,6 +13,12 @@ async function intakeSetStatus(reg, status, opts) {
   opts = opts || {};
   if (_busyIds.has(reg.id)) { toast('處理中，等等…', 'warn'); return false; }
   const st = Store.state;
+  if (status === 'approved' && !reg.pcheck && !opts.skipPayCheck) {
+    const go = await confirmDlg('⚠️ 區會未核對收款',
+      '「' + reg.nameZh + '」有入數紙，但區管理系統仲未 tick「已核對收款」（要區會入到區帳戶先核對到）。' +
+      '\n\n確定唔等核對、照樣接納？', { danger: true, okText: '照樣接納' });
+    if (!go) return false;
+  }
   if (status === 'approved' && st && st.stats.quota > 0 && st.stats.approved + 1 > st.stats.quota && !opts.skipQuota) {
     const go = await confirmDlg('⚠️ 已超名額',
       '名額 ' + st.stats.quota + ' 人，已取錄 ' + st.stats.approved + ' 人。再接納 ' + reg.nameZh + ' 會超收——確定？',
@@ -106,10 +112,23 @@ function intakeDetail(reg) {
     h('div', { class: 'card-in' }, h('div', { class: 'card-title' }, '💰 付款'),
       h('table', { class: 'kv-table' },
         F('付款方式', reg['付款方式']), F('付款人', reg['付款人姓名']), F('付款帳戶', reg['付款帳戶']),
-        F('需要收據', reg['是否需要收據'])),
+        F('需要收據', reg['是否需要收據']),
+        F('區會核對收款', reg.pcheck
+          ? '✔ 已核對（' + (reg.pcBy || '—') + '・' + fmtDT(reg.pcAt) + '）'
+          : '⚠️ 未核對——由區管理系統核對區帳戶後 tick'),
+        F('STA 表格正本', reg.sta
+          ? '✔ 已交回（' + (reg.staNote || '—') + '）'
+          : (reg.status === 'approved' ? '❌ 未交回（上課時收）' : '— 上課時收'))),
       h('div', { class: 'btn-row' },
         linkBtn(reg.receiptUrl, '入數紙（Drive）'),
-        linkBtn(reg.formUrl, '已填表格截圖'))),
+        linkBtn(reg.formUrl, '已填表格截圖'),
+        reg.status === 'approved' && !reg.sta
+          ? h('button', { class: 'btn btn-sm', onclick: () => {
+              Store.addRegDraft(reg, '已交表格正本（STA）', '✔', reg.nameZh + ' 收STA正本');
+              Store.addRegDraft(reg, '收表記錄', (Store.staffName() || '') + ' ' + fmtDT(new Date().toISOString()), reg.nameZh + ' 收表記錄');
+              m.close(); toast('✏️ 已記錄「' + reg.nameZh + '」交回正本——撳右上角 💾 儲存先寫入', 'ok');
+            } }, '📄 收到正本')
+          : null)),
     reg['備註'] ? h('div', { class: 'card-in' }, h('div', { class: 'card-title' }, '📝 備註'), esc(reg['備註'])) : null);
 
   const actions = [];
@@ -156,7 +175,8 @@ regPage('intake', function (root) {
 
   /* 名單 */
   let regs = st.regs.slice().sort((a, b) => (a.submittedAt < b.submittedAt ? 1 : -1));
-  if (_intakeFilter !== 'all') regs = regs.filter(r => r.status === _intakeFilter);
+  if (_intakeFilter === 'unpaid') regs = regs.filter(r => r.status !== 'cancelled' && r.status !== 'rejected' && !r.pcheck);
+  else if (_intakeFilter !== 'all') regs = regs.filter(r => r.status === _intakeFilter);
   if (_intakeSearch) {
     const q = _intakeSearch.toLowerCase();
     regs = regs.filter(r =>
@@ -191,7 +211,11 @@ regPage('intake', function (root) {
           reg.nameEn ? h('span', { class: 'dim' }, '・' + esc(reg.nameEn)) : null),
         h('span', { class: 'chip-st ' + STATUS_INFO[reg.status].cls }, STATUS_INFO[reg.status].label),
         reg.status === 'approved' && reg.studentNo !== '' ? h('span', { class: 'tag tag-blue' }, '#' + esc(reg.studentNo)) : null,
-        reg.group ? h('span', { class: 'tag' }, esc(reg.group)) : null),
+        reg.group ? h('span', { class: 'tag' }, esc(reg.group)) : null,
+        reg.pcheck ? h('span', { class: 'tag tag-green', title: '區會已核對收款' + (reg.pcBy ? '（' + reg.pcBy + '）' : '') }, '💰✔')
+          : (reg.status === 'pending' || reg.status === 'approved' ? h('span', { class: 'tag tag-amber', title: '區會未核對收款' }, '💰？') : null),
+        reg.sta ? h('span', { class: 'tag tag-green', title: '已交回 STA 表格正本' }, '📄✔')
+          : (reg.status === 'approved' ? h('span', { class: 'tag tag-amber', title: '未交回 STA 表格正本（上課時收）' }, '📄') : null)),
       h('div', { class: 'reg-sub' },
         esc(reg['旅團'] || '—') + '・' + esc(reg['所屬童軍區'] || '—') + '・' + esc(reg['性別'] || '—') + '・' + esc(reg['聯絡電話'] || '—')),
       h('div', { class: 'reg-sub dim' },

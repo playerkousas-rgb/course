@@ -13,6 +13,9 @@
 
 | Action | 參數 | 回傳 | 前端用途 |
 |---|---|---|---|
+| `auth` | `password` | `{role:'staff'\|'admin',firstLogin:bool,v:'5.0.0'}` | 解鎖驗證（coursev5+）。錯 5 次 → 後端鎖 10 分鐘 |
+| `setPassword` | `oldPassword,newPassword` | `{saved}` | 改共職員密碼（全體生效；新密碼 ≥4 位、≠1234、唔可以有 `:`） |
+| `setPaymentCheck` | `id`(=時間戳記),`verified`,`by` | `{saved,row,verified}` | **區管理系統用**：核對區帳戶後 tick「已核對收款」；identity 定位、唔 bump rev、自動補表頭 |
 | `getCourseSheetRaw` | — | `{input01,input02,input03,input04,resp,paramsWX,notice,accept,finance,completion,cert,subsidy,pulledAt,rev,revSavedAt,revBy}` | 主同步（15 秒輪詢）；rev 供樂觀鎖 |
 | `getCourseProfile` | — | 課程結構資料 | 連線測試＋解鎖頁職員名單 |
 | `setRegStatus` | `id`(=時間戳記),`status`(pending/approved/rejected/cancelled),`reviewer` | `{saved,id,status}` | 收生：接納/拒絕/取消。**唔檢查 rev、唔 bump rev**（identity 定位，安全） |
@@ -52,7 +55,10 @@ B18 截止／B19 公佈；職員 23–42（A職位B姓名C稱謂D單位E資格F�
 可編：G12 檔案編號／G13 發出日期／C23 參加資格／C24 費用說明／C31 服裝／C32–37 備註／E43 區總監署名／E45 代行
 其餘 C22/C25/C28/C29/C30/C39、A15、B18:D21 全係公式（前端自行等效組版做 live preview）
 
-### 表格回應（44 欄）
+### 表格回應（coursev5 起 49 欄）
+公式欄（**只讀**）：AD 旅號（旅團抽數字）、AI 學員編號（✔ 行 COUNTIF，報名次序）
+職員欄：AJ 分組（第一至八組）、AK 審批狀態、AL 批核人、AM 批核時間（AK/AL/AM+AC 由 setRegStatus 寫）
+coursev5 新欄：AS 已核對收款✔／AT 核對人／AU 核對時間（區管理系統 setPaymentCheck 寫）；AV 已交表格正本（STA）✔／AW 收表記錄（班職員收表時 saveCourseBatch 寫）
 公式欄（**只讀**）：AD 旅號（旅團抽數字）、AI 學員編號（✔ 行 COUNTIF，報名次序）
 職員欄：AJ 分組（第一至八組）、AK 審批狀態、AL 批核人、AM 批核時間（AK/AL/AM+AC 由 setRegStatus 寫）
 

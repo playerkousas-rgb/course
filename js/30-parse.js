@@ -173,6 +173,11 @@ function parseRegs(resp) {
     o.submittedAt = String(o['時間戳記'] || '').trim();
     o.reviewer = String(o['批核人'] || '').trim();
     o.reviewedAt = String(o['批核時間'] || '').trim();
+    o.pcheck = String(o['已核對收款'] || '').trim() === '✔';   // 區管理系統核對區帳戶後 tick
+    o.pcBy = String(o['核對人'] || '').trim();
+    o.pcAt = String(o['核對時間'] || '').trim();
+    o.sta = String(o['已交表格正本（STA）'] || '').trim() === '✔';   // 職員收表（報名表正本）
+    o.staNote = String(o['收表記錄'] || '').trim();
     out.push(o);
   }
   return out;
@@ -193,12 +198,21 @@ function parseNoticeEdits(notice) {
 /* ── 收生統計 ── */
 function regStats(regs, quota) {
   const s = { total: regs.length, pending: 0, approved: 0, rejected: 0, cancelled: 0, needReceipt: 0 };
+  s.groupsInUse = false;
   regs.forEach((r) => {
     if (s[r.status] != null) s[r.status]++;
-    if (r.status === 'approved' && String(r['是否需要收據'] || '').trim() === '是') s.needReceipt++;
+    if (r.status === 'approved') {
+      if (String(r['是否需要收據'] || '').trim() === '是') s.needReceipt++;
+      if (!r.pcheck) s.approvedUnpaid = (s.approvedUnpaid || 0) + 1;
+      if (!r.sta) s.approvedNoSta = (s.approvedNoSta || 0) + 1;
+      if (r.group) s.groupsInUse = true;
+      else s.ungrouped = (s.ungrouped || 0) + 1;
+    }
+    if (r.status === 'pending' && !r.pcheck) s.pendingUnpaid = (s.pendingUnpaid || 0) + 1;
   });
   s.quota = Number(quota) || 0;
   s.seatsLeft = s.quota ? Math.max(0, s.quota - s.approved) : '';
+  if (!s.groupsInUse) s.ungrouped = 0;
   return s;
 }
 
