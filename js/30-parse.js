@@ -69,7 +69,7 @@ function fmtShortDate(ymd) {
 
 /* ── 參數 W/X（區會常數） ── */
 function parseParamsWX(pw) {
-  const out = { portalUrl: '', fpsId: '', fpsName: '', districtWeb: '' };
+  const out = { portalUrl: '', fpsId: '', fpsName: '', districtWeb: '', approved: false, noticeUrl: '' };
   if (!Array.isArray(pw)) return out;
   for (let i = 0; i < pw.length; i++) {
     const row = pw[i] || [];
@@ -79,6 +79,9 @@ function parseParamsWX(pw) {
     else if (w.indexOf('FPS 識別碼') >= 0) out.fpsId = x;
     else if (w.indexOf('FPS 戶口') >= 0) out.fpsName = x;
     else if (w.indexOf('區會網址') >= 0) out.districtWeb = x;
+    /* 掛載流程狀態（區管理層喺區管理系統寫,APP 只讀） */
+    else if (w.indexOf('區會批准') >= 0) out.approved = x === '✔' || x === '是' || x === 'TRUE';
+    else if (w.indexOf('通告網址') >= 0 || w.indexOf('通告 URL') >= 0) out.noticeUrl = x;
   }
   return out;
 }
@@ -364,6 +367,26 @@ function parseCompletion(grid, regs) {
     out.decided++;
   }
   return out;
+}
+
+/* ── 掛載流程狀態 ──
+   本機草稿(mock 未交區) → 生成 GS 交區(submitted) → 區會批准(params.approved)
+   → 通告上網+貼 URL(noticeUrl) → 正式掛載成員系統報名(mounted)
+   真班(非 mock)一律當已交區;批准/通告網址係區管理層喺區管理系統寫,APP 只讀 ── */
+function mountStatus(st) {
+  st = st || Store.state;
+  const course = Store.activeCourse();
+  const isMockDraft = !!(course && course.mock);
+  const sub = (st && st.raw && st.raw.submitted) || null;
+  const submitted = !isMockDraft || !!(sub && sub.url);
+  const approved = !!(st && st.params && st.params.approved);
+  const noticeUrl = (st && st.params && st.params.noticeUrl) || '';
+  const phase = !submitted ? 'draft' : (!approved ? 'submitted' : (!noticeUrl ? 'approved' : 'mounted'));
+  return {
+    phase: phase, submitted: submitted, approved: approved, noticeUrl: noticeUrl,
+    isMockDraft: isMockDraft, gsUrl: sub ? sub.url : '',
+    portalUrl: (st && st.params && st.params.portalUrl) || '',
+  };
 }
 
 /* ── Input03 時間表（每節 10 行 block;R(head) 日期/地點、R(head+1) 時間/服裝、head+4 起 rundown） ── */

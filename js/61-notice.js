@@ -11,6 +11,23 @@ regPage('notice', function (root) {
   const get = (tab, r, c) => Store.effectiveCell(tab, r, c);
   const doc = composeNoticeDoc(get, st.params);
 
+  /* ── 掛載狀態（通告出街時機閘） ── */
+  const ms = mountStatus(st);
+  if (ms.phase === 'draft') {
+    root.appendChild(h('div', { class: 'form-msg warn' },
+      '📝 本機草稿——通告內容可以先草擬，但未生成 GS 之前唔好交出去。填好晒之後去儀表板「🚢 掛載流程」撳「📤 生成 GS 交區」。'));
+  } else if (ms.phase === 'submitted') {
+    root.appendChild(h('div', { class: 'form-msg warn' },
+      '⏳ 已交區，待區管理層批改——通告內容可以照執，但區會 tick「區會批准」之前，唔好交區網頁管理員。'));
+  } else if (ms.phase === 'approved') {
+    root.appendChild(h('div', { class: 'form-msg ok' },
+      '✅ 區會已批准——而家可以生成通告（下面 🖨 列印／📋 複製文字版）交區網頁管理員。上網之後提醒區管理層貼返「通告網址」，就正式掛載成員系統報名。'));
+  } else {
+    root.appendChild(h('div', { class: 'form-msg ok' },
+      '🌐 通告已上網、成員系統報名進行中：',
+      h('a', { href: ms.noticeUrl, target: '_blank', rel: 'noopener' }, ms.noticeUrl)));
+  }
+
   /* ── 編輯面板 ── */
   const editCard = h('div', { class: 'card no-print' },
     h('div', { class: 'card-title' }, '✏️ 通告可編欄位'),

@@ -180,6 +180,26 @@ async function main() {
   const ct2 = await MockAPI.call('setCertRow', { apiKey: KEY, name: '陳美琪', pickupDate: '2026-12-02', signed: '✔' });
   ok(ct2.ok && ct2.data.row > 7, '陳美琪開新行');
 
+  /* ══ finalizeCourse + 掛載流程（本機草稿 → 交區 → 批准 → 通告 URL） ══ */
+  section('掛載流程 finalizeCourse');
+  MockDemo.reset();
+  const fc = await MockAPI.call('createCourse', { courseName: '遠足專章訓練班', clName: '陳大文' });
+  const FK = fc.data.apiKey;
+  let fr = await MockAPI.call('finalizeCourse', { apiKey: FK, by: '陳大文' });
+  ok(fr.ok && /docs\.google\.com/.test(fr.data.url), '生成 GS 交區 ok（有 URL）');
+  let fRaw = (await MockAPI.call('getCourseSheetRaw', { apiKey: FK })).data;
+  ok(!!(fRaw.submitted && fRaw.submitted.url), 'dump 有 submitted');
+  fr = await MockAPI.call('finalizeCourse', { apiKey: FK });
+  ok(!fr.ok, '重複生成 → 拒絕');
+  /* 區管理層 tick 批准（寫參數分頁,APP 只讀） */
+  MockDemo.approveCourse(FK);
+  fRaw = (await MockAPI.call('getCourseSheetRaw', { apiKey: FK })).data;
+  ok(fRaw.paramsWX.some((r) => r[0] === '區會批准' && r[1] === '✔'), '參數分頁「區會批准」✔');
+  MockDemo.setNoticeUrl(FK, 'https://example.hk/notice/x');
+  fRaw = (await MockAPI.call('getCourseSheetRaw', { apiKey: FK })).data;
+  ok(fRaw.paramsWX.some((r) => r[0] === '通告網址' && r[1] === 'https://example.hk/notice/x'), '「通告網址」已貼');
+  MockDemo.reset();
+
   /* ══ createCourse（CL 起表:新空白模版班,唔影響原有班） ══ */
   section('createCourse CL 起表');
   MockDemo.reset();

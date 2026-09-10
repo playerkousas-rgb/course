@@ -183,8 +183,19 @@ function mockSeedState() {
   ['學員編號', '中文姓名', '旅號', '證書編號', '領取日期', '簽收'].forEach((t, i) => mockSet(CERT, 6, i + 2, t));
   mockSet(CERT, 7, 2, 1); mockSet(CERT, 7, 3, '王小明'); mockSet(CERT, 7, 4, '82'); mockSet(CERT, 7, 5, 'SPG-2026-001');
 
+  /* 參數分頁（區會常數＋掛載狀態——區管理層寫,APP 只讀） */
+  const PARAM = [
+    ['區會常數（唔好改名）', ''],
+    ['成員系統報名網址', 'https://member-portal-sigma-swart.vercel.app/training'],
+    ['FPS 識別碼', '102866183'],
+    ['FPS 戶口名稱', 'SCOUT ASSOCIATION OF HONG KONG - SHAU KEI WAN DISTRICT'],
+    ['區會網址', 'www.skwscout.org.hk'],
+    ['區會批准', '✔'],
+    ['通告網址', 'https://www.skwscout.org.hk/notice/photo-2026'],
+  ];
+
   const st = {
-    rev: 0, savedAt: '', by: '',
+    rev: 0, savedAt: '', by: '', submitted: { url: 'https://docs.google.com/spreadsheets/d/demo-course-gs', at: '2026-09-20T02:00:00.000Z' },
     sheets: {},
   };
   st.sheets[TAB.IN1] = IN1; st.sheets[TAB.IN2] = IN2;
@@ -217,6 +228,7 @@ function mockSeedState() {
     ['1440', 60, '作品評審＋頒發結業', '陳大文'],
   ]);
   st.sheets[TAB.IN3] = IN3;
+  st.sheets[TAB.PARAM] = PARAM;
   st.sheets[TAB.ATTEND] = ATT;
   st.sheets[TAB.COMPLETE] = COMP;
   st.sheets[TAB.CERT] = CERT;
@@ -261,8 +273,18 @@ function mockBlankState(nm, b) {
   mockSet(IN4, 7, 1, '收據編號');
   for (let r = 8; r <= 42; r++) mockSet(IN4, r, 1, r - 7);
 
-  const st = { rev: 0, savedAt: '', by: '', sheets: {} };
+  const PARAM = [
+    ['區會常數（唔好改名）', ''],
+    ['成員系統報名網址', 'https://member-portal-sigma-swart.vercel.app/training'],
+    ['FPS 識別碼', '102866183'],
+    ['FPS 戶口名稱', 'SCOUT ASSOCIATION OF HONG KONG - SHAU KEI WAN DISTRICT'],
+    ['區會網址', 'www.skwscout.org.hk'],
+    ['區會批准', ''],
+    ['通告網址', ''],
+  ];
+  const st = { rev: 0, savedAt: '', by: '', submitted: null, sheets: {} };
   st.sheets[TAB.IN1] = IN1; st.sheets[TAB.IN2] = IN2;
+  st.sheets[TAB.PARAM] = PARAM;
   st.sheets[TAB.IN3] = IN3; st.sheets[TAB.IN4] = IN4;
   st.sheets[TAB.RESP] = [RESP_HEADERS.slice()];
   st.sheets[TAB.NOTICE] = mockGrid(48, 8);
@@ -406,6 +428,16 @@ const MockAPI = {
     if (action === 'auth') return mockPwAuth(state, b);
     if (action === 'setPassword') return mockPwSet(state, b);
     if (action === 'setPaymentCheck') return mockPaymentCheck(state, b);
+    if (action === 'finalizeCourse') {
+      /* CL 填好晒 → 生成 GS 交區(mock:標記 submitted;真流程由前端 call CourseFactory 再 batch 寫入) */
+      if (state.submitted && state.submitted.url) return mockErr('呢班已經生成咗 GS 交區（' + state.submitted.url + '）');
+      const nm = String((state.sheets[TAB.IN1][0] && state.sheets[TAB.IN1][0][1]) || '').trim();
+      if (!nm) return mockErr('請先填課程名稱');
+      state.submitted = { url: 'https://docs.google.com/spreadsheets/d/mock-' + Date.now().toString(36), at: new Date().toISOString() };
+      mockBumpRev(state, b.by || '');
+      mockPersist();
+      return mockOk({ exec: 'mock', apiKey: (b.apiKey || ''), url: state.submitted.url, courseName: nm });
+    }
     if (action === 'setCompletionRow') return mockSetCompletionRow(state, b);
     if (action === 'setCertRow') return mockSetCertRow(state, b);
     if (action === 'getCourseSheetRaw') {
@@ -413,16 +445,19 @@ const MockAPI = {
         input01: state.sheets[TAB.IN1], input02: mockDumpIn2(state),
         input03: state.sheets[TAB.IN3], input04: state.sheets[TAB.IN4],
         resp: mockDumpResp(state),
-        paramsWX: [
-          ['區會常數（唔好改名）', ''],
-          ['成員系統報名網址', 'https://member-portal-sigma-swart.vercel.app/training'],
-          ['FPS 識別碼', '102866183'],
-          ['FPS 戶口名稱', 'SCOUT ASSOCIATION OF HONG KONG - SHAU KEI WAN DISTRICT'],
-          ['區會網址', 'www.skwscout.org.hk'],
-        ],
+        paramsWX: Array.isArray(state.sheets[TAB.PARAM]) && state.sheets[TAB.PARAM].length
+          ? state.sheets[TAB.PARAM]
+          : [
+              ['區會常數（唔好改名）', ''],
+              ['成員系統報名網址', 'https://member-portal-sigma-swart.vercel.app/training'],
+              ['FPS 識別碼', '102866183'],
+              ['FPS 戶口名稱', 'SCOUT ASSOCIATION OF HONG KONG - SHAU KEI WAN DISTRICT'],
+              ['區會網址', 'www.skwscout.org.hk'],
+            ],
         notice: state.sheets[TAB.NOTICE],
         attend: state.sheets[TAB.ATTEND] || [],
         accept: [], finance: [], completion: state.sheets[TAB.COMPLETE], cert: state.sheets[TAB.CERT], subsidy: [],
+        submitted: state.submitted || null,
         pulledAt: new Date().toISOString(),
         rev: state.rev, revSavedAt: state.savedAt, revBy: state.by,
       });
@@ -666,7 +701,22 @@ function mockBatchWrite(state, b) {
 }
 
 /* ── 演示工具（唔屬 GAS 合約；設定頁用） ── */
+/* 模擬區管理層(演示掛載流程用):approveCourse=tick 批准格;setNoticeUrl=貼通告網址 */
+function mockDistrict(key, patch) {
+  const reg = mockCourses();
+  const st = reg[key];
+  if (!st) throw new Error('搵唔到呢個班（' + key + '）——先喺 APP 開新班');
+  const p = st.sheets[TAB.PARAM];
+  for (let i = 0; i < p.length; i++) {
+    if (patch.kw.some((k) => String(p[i][0] || '').indexOf(k) >= 0)) { p[i][1] = patch.v; break; }
+  }
+  mockSaveCourses(reg);
+}
+
 const MockDemo = {
+  approveCourse: function (key) { mockDistrict(key, { kw: ['區會批准'], v: '✔' }); },
+  rejectCourse: function (key) { mockDistrict(key, { kw: ['區會批准'], v: '' }); },
+  setNoticeUrl: function (key, url) { mockDistrict(key, { kw: ['通告網址'], v: url || 'https://www.skwscout.org.hk/notice/demo' }); },
   /* 模擬另一職員儲存：bump rev＋改一格 → 觸發你部機嘅衝突偵測 */
   otherStaffSave: function () {
     const state = mockLoad();

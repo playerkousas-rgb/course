@@ -98,6 +98,8 @@ const raw = {
   resp: resp, attend: att, completion: comp, cert: certG,
   paramsWX: [
     ['區會常數（唔好改名）', ''],
+    ['區會批准', '✔'],
+    ['通告網址', 'https://www.skwscout.org.hk/notice/demo'],
     ['成員系統報名網址', 'https://portal.test/training'],
     ['FPS 識別碼', '102866183'],
     ['FPS 戶口名稱', 'SAHK SKW'],
@@ -125,6 +127,10 @@ ok(p.regs[0].pcheck, '已核對收款 ✔');
 ok(p.regs[0].pcBy === '區會財務', '核對人');
 ok(p.regs[0].sta, 'STA 正本已交');
 ok(p.regs[1].pcheck === false, '第二筆未核對收款 → false');
+section('掛載狀態 parseParamsWX');
+ok(p.params.approved === true, '區會批准 ✔');
+eq(p.params.noticeUrl, 'https://www.skwscout.org.hk/notice/demo', '通告網址');
+
 section('時間表 parseInput03');
 eq(p.input03.blocks.length, 2, '兩個有料 block');
 eq(p.input03.blocks[0].date, '2026-10-17', 'block1 日期');

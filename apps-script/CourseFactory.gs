@@ -80,6 +80,17 @@ function createCourse(b) {
   sync.getRange('A5').setValue(apiKey);
   sync.hideSheet();
 
+  /* 2.5 參數分頁預留掛載狀態兩行（區管理層寫,APP 只讀） */
+  const param = ss.getSheetByName('參數');
+  if (param) {
+    const last = param.getLastRow();
+    const labels = ['區會批准', '通告網址'];
+    labels.forEach(function (t) {
+      const found = param.createTextFinder(t).matchEntireCell(true).findNext();
+      if (!found) param.getRange(last + 1, 1, 1, 2).setValues([[t, '']]);
+    });
+  }
+
   /* 3. 預填 CL 喺 APP 填嘅基本資料（Input01 B1-B13 + Input02 班領導人） */
   const in1 = ss.getSheetByName('Input01 預算');
   if (in1) {
