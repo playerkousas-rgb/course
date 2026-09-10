@@ -18,7 +18,7 @@
 | `setPaymentCheck` | `id`(=時間戳記),`verified`,`by` | `{saved,row,verified}` | **區管理系統用**：核對區帳戶後 tick「已核對收款」；identity 定位、唔 bump rev、自動補表頭 |
 | `getCourseSheetRaw` | — | `{input01,input02,input03,input04,resp,paramsWX,notice,attend,accept,finance,completion,cert,subsidy,pulledAt,rev,revSavedAt,revBy}` | 主同步（15 秒輪詢）；rev 供樂觀鎖；`attend`（Print_學員出席紀錄）係 coursev5 加嘅 dump |
 | `getCourseProfile` | — | 課程結構資料 | 連線測試＋解鎖頁職員名單 |
-| `createCourse` | `masterKey`(開班碼),`courseName`,`edition?,section?,badge?,intake?,fee?,clName?` | `{exec,apiKey,courseId,courseName,firstLogin}` | **區級 CourseFactory**（`apps-script/CourseFactory.gs` 獨立部署）:CL 起表——copy 模版＋預填＋產 apiKey;APP 即刻連線 |
+| `createCourse` | `masterKey`(開班碼),`courseName`,`edition?,section?,badge?,intake?,fee?,clName?` | `{exec,apiKey,courseId,courseName,firstLogin,url}` | **區級 CourseFactory**（`apps-script/CourseFactory.gs` 獨立部署）:CL 新開班**即刻起真 GS**（區管理系統 SCRIPT 要 URL 先連結批核）——copy 模版＋預填＋產 apiKey＋回傳 GS `url` 交區;APP 即刻連線 |
 | `setRegStatus` | `id`(=時間戳記),`status`(pending/approved/rejected/cancelled),`reviewer` | `{saved,id,status}` | 收生：接納/拒絕/取消。**唔檢查 rev、唔 bump rev**（identity 定位，安全） |
 | `saveCourseBatch` | `cells[{tab,row,col,value}]`,`baseRev`,`by` | `{saved,rev,savedAt,updated,skippedTabs}` | 批次寫格（開班文件／通告／分組） |
 | `addExpenseRow` | `amounts{B..J}`,`note` | `{added,row,receiptNo}` | 〔二階段〕支出 append-only，唔撞 rev |
@@ -59,6 +59,10 @@ B18 截止／B19 公佈；職員 23–42（A職位B姓名C稱謂D單位E資格F�
 
 ### 表格回應（coursev5 起 49 欄）
 公式欄（**只讀**）：AD 旅號（旅團抽數字）、AI 學員編號（✔ 行 COUNTIF，報名次序）
+參數分頁（`參數`）掛載流程兩格（**區管理層喺區管理系統寫，APP 只讀**）：
+- 「區會批准」＝✔（區管理層批改完先 tick；tick 前通告唔可以交區網頁管理員）
+- 「通告網址」＝通告上網後貼入；一有值＝已正式掛載成員系統（報名中）
+
 職員欄：AJ 分組（第一至八組）、AK 審批狀態、AL 批核人、AM 批核時間（AK/AL/AM+AC 由 setRegStatus 寫）
 coursev5 新欄：AS 已核對收款✔／AT 核對人／AU 核對時間（區管理系統 setPaymentCheck 寫）；AV 已交表格正本（STA）✔／AW 收表記錄（班職員收表時 saveCourseBatch 寫）
 公式欄（**只讀**）：AD 旅號（旅團抽數字）、AI 學員編號（✔ 行 COUNTIF，報名次序）

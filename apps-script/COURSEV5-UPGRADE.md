@@ -53,7 +53,12 @@ gs/
 
 ## CL 起表（CourseFactory，取代舊版 CS 起表）
 
-由 coursev5.1 起，起表工序由 APP 發動：CL 喺連線畫面「🆕 新開班」填課程名／屆別／支部／專章／收生／收費／班領導人 → 呼叫區級 `CourseFactory.gs`（`apps-script/CourseFactory.gs`，獨立專案部署一次）→ copy 開班文件模版＋預填資料＋產 apiKey → APP 即刻連線（首次密碼 1234）。之後照舊：區管理層連結 GS → 睇 APP「開班文件 → 📤 區會審核」摘要 → 一鍵批核掛載通告（成員系統報名）。
+由 coursev5.1 起，起表工序由 APP 發動——**新開班即刻起真 GS**（區管理系統嘅 SCRIPT 要攞到 GS URL 先連結到工作簿觀看訓練班資料批核，所以 GS 唔可以遲開）：
+
+1. **即刻起表**：CL 喺連線畫面「🆕 新開班」填課程名／屆別／支部／專章／收生／收費／班領導人 → 呼叫區級 `CourseFactory.gs`（`apps-script/CourseFactory.gs`，獨立專案部署一次）→ 喺區 Drive copy 開班文件模版＋預填＋產 apiKey → APP 即刻連線（首次密碼 1234），CL 複製 **GS URL 交區管理系統**
+2. **CL 填寫**：喺 APP 填晒預算／節次／時間表／通告——全部直接寫入 GS（區管理系統隨時連結觀看）
+
+之後掛載流程：區管理層透過**區管理系統**批改 → OK 就 tick 參數分頁「**區會批准**」格 → APP 見到 ✔ 之後 CL 生成通告（列印／文字版）交**區網頁管理員**上網 → 上網後區管理層將通告 URL 貼入參數分頁「**通告網址**」格 → 正式掛載到**成員系統**（報名開始）。APP 全程只讀呢兩格（15 秒輪詢自動更新狀態）。
 
 ### 課程 Script 要加嘅一段（apiKey bootstrap）
 
@@ -79,7 +84,7 @@ function ensureApiKey() {
 1. 開新 Apps Script 專案 → 貼 `CourseFactory.gs` → 填 Script Properties（`FACTORY_KEY_HASH`／`TEMPLATE_FILE_ID`／`FOLDER_ID`／`COURSE_API_EXEC`）
 2. 模版 GS 嘅 bound script 加 `ensureApiKey()`（上面嗰段）
 3. 部署 CourseFactory 做網頁應用程式（任何人）→ `/exec` 網址＋開班碼發俾 CL
-4. CL 開 APP → 🆕 新開班 → 🏛 連區會起表 → 填 form → 起表完成即刻入新班
+4. CL 開 APP → 🆕 新開班 → 🏛 連區會起表（即刻開真 GS）→ 複製 GS URL 交區管理系統 → 喺 APP 填晒所有嘢
 
 ### 多班共用 API（可選）
 
