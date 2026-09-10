@@ -137,20 +137,29 @@ regPage('setup', function (root) {
   const holder = h('div', { id: 'setupHolder' });
   const segIn1 = h('button', { class: 'seg-btn' }, '💰 Input01 預算');
   const segIn2 = h('button', { class: 'seg-btn' }, '📋 Input02 班資料');
+  const segIn3 = h('button', { class: 'seg-btn' }, '🗓 時間表');
+  const segRev = h('button', { class: 'seg-btn' }, '📤 區會審核');
   function paintSeg() {
     segIn1.classList.toggle('active', sub === 'in1');
     segIn2.classList.toggle('active', sub === 'in2');
+    segIn3.classList.toggle('active', sub === 'in3');
+    segRev.classList.toggle('active', sub === 'rev');
   }
   segIn1.addEventListener('click', () => { sub = 'in1'; paintSeg(); renderSub(); });
   segIn2.addEventListener('click', () => { sub = 'in2'; paintSeg(); renderSub(); });
+  segIn3.addEventListener('click', () => { sub = 'in3'; paintSeg(); renderSub(); });
+  segRev.addEventListener('click', () => { sub = 'rev'; paintSeg(); renderSub(); });
 
   root.appendChild(h('div', { class: 'page-note no-print' }, '✏️ 所有修改先存本機草稿——撳右上角 💾 先一次過寫入 Sheet（防多位職員同時改撞車）。'));
-  root.appendChild(h('div', { class: 'seg no-print' }, segIn1, segIn2));
+  root.appendChild(h('div', { class: 'seg no-print', style: { flexWrap: 'wrap' } }, segIn1, segIn2, segIn3, segRev));
   root.appendChild(holder);
 
   function renderSub() {
     holder.innerHTML = '';
-    if (sub === 'in1') renderIn1(holder); else renderIn2(holder);
+    if (sub === 'in1') renderIn1(holder);
+    else if (sub === 'in2') renderIn2(holder);
+    else if (sub === 'in3') renderIn3(holder);
+    else renderReview(holder);
     updateSetupTotals();
   }
   renderSub();
@@ -268,6 +277,168 @@ function renderIn1(root) {
 
   root.appendChild(h('div', { class: 'row-sub', style: { marginTop: '4px' } },
     '💡 總支出／收入／津貼由「Print_財政預算」公式自動計——區管理平台同列印版會自動讀。'));
+}
+
+/* ── Input03 時間表（每節一個 10 行 block;需時累計自動排時間） ── */
+function in3AutoTimes(sessTime, minsArr) {
+  const m = String(sessTime || '').match(/(\d{1,4})\s*[-–—]\s*(\d{1,4})/);
+  if (!m) return null;
+  const t = Number(m[1]);
+  let mm = Math.floor(t / 100) * 60 + (t % 100);
+  return minsArr.map((mins) => {
+    const disp = mm;
+    mm += Number(mins) || 0;
+    return String(Math.floor(disp / 60)).padStart(2, '0') + String(disp % 60).padStart(2, '0');
+  });
+}
+
+function renderIn3(root) {
+  const st = Store.state;
+  if (!st.sessions.length) {
+    root.appendChild(h('div', { class: 'card empty' }, '未填節次——先去「📋 Input02 班資料」填好每節日期時間；時間表會照節次逐節一個 block（最多 9 節）'));
+    return;
+  }
+  root.appendChild(h('div', { class: 'page-note no-print' },
+    '⏱ 填好每項「需時（分鐘）」，撳「自動排時間」會照節次開始時間逐項累計填「時間」欄。所有改動都係草稿——撳右上角 💾 先寫入。'));
+
+  st.sessions.slice(0, IN3_LAYOUT.maxBlocks).forEach((sess, i) => {
+    const head = IN3_LAYOUT.firstHead + i * IN3_LAYOUT.blockRows;
+    const card = h('div', { class: 'card' });
+    card.appendChild(h('div', { class: 'card-title' }, '🗓 第 ' + (i + 1) + ' 節・' + fmtShortDate(sess.date) + '（' + sess.time + '）'));
+
+    card.appendChild(h('div', { class: 'grid-2c' },
+      h('div', { class: 'field' }, h('label', { class: 'flabel' }, '日期'),
+        smallInput(TAB.IN3, head, IN3_LAYOUT.date.c, 'date', '時間表第' + (i + 1) + '節 日期', 'Input03 時間表')),
+      h('div', { class: 'field' }, h('label', { class: 'flabel' }, '時間'),
+        smallInput(TAB.IN3, head + IN3_LAYOUT.time.dr, IN3_LAYOUT.time.c, 'text', '時間表第' + (i + 1) + '節 時間', 'Input03 時間表')),
+      h('div', { class: 'field' }, h('label', { class: 'flabel' }, '地點'),
+        smallInput(TAB.IN3, head + IN3_LAYOUT.venue.dr, IN3_LAYOUT.venue.c, 'text', '時間表第' + (i + 1) + '節 地點', 'Input03 時間表')),
+      h('div', { class: 'field' }, h('label', { class: 'flabel' }, '服裝'),
+        smallInput(TAB.IN3, head + IN3_LAYOUT.dress.dr, IN3_LAYOUT.dress.c, 'text', '時間表第' + (i + 1) + '節 服裝', 'Input03 時間表'))));
+
+    /* rundown 表 */
+    const rows = [];
+    let totalMins = 0;
+    for (let k = 0; k < IN3_LAYOUT.items; k++) {
+      const r = head + 4 + k;
+      const mins = Number(Store.effectiveCell(TAB.IN3, r, IN3_LAYOUT.item.mins));
+      if (Number.isFinite(mins) && mins) totalMins += mins;
+      rows.push(h('tr', null,
+        h('td', { class: 'td-idx' }, String(k + 1)),
+        h('td', null, smallInput(TAB.IN3, r, IN3_LAYOUT.item.start, 'text', '時間表第' + (i + 1) + '節 開始時間 #' + (k + 1), 'Input03 時間表')),
+        h('td', null, smallInput(TAB.IN3, r, IN3_LAYOUT.item.mins, 'number', '時間表第' + (i + 1) + '節 需時 #' + (k + 1), 'Input03 時間表')),
+        h('td', null, smallInput(TAB.IN3, r, IN3_LAYOUT.item.name, 'text', '時間表第' + (i + 1) + '節 項目 #' + (k + 1), 'Input03 時間表')),
+        h('td', null, smallInput(TAB.IN3, r, IN3_LAYOUT.item.owner, 'text', '時間表第' + (i + 1) + '節 負責人 #' + (k + 1), 'Input03 時間表'))));
+    }
+    const autoBtn = h('button', { class: 'btn btn-sm' }, '⏱ 自動排時間');
+    autoBtn.addEventListener('click', () => {
+      const minsArr = [];
+      for (let k = 0; k < IN3_LAYOUT.items; k++) minsArr.push(Store.effectiveCell(TAB.IN3, head + 4 + k, IN3_LAYOUT.item.mins));
+      const sessTime = Store.effectiveCell(TAB.IN3, head + IN3_LAYOUT.time.dr, IN3_LAYOUT.time.c) || sess.time;
+      const times = in3AutoTimes(sessTime, minsArr);
+      if (!times) { toast('睇唔明節次時間（要有「1930 - 2130」呢種格式）', 'err'); return; }
+      let n = 0;
+      times.forEach((t2, k) => {
+        const mv = minsArr[k];
+        if (mv !== '' && mv != null) {
+          Store.addCellDraft(TAB.IN3, head + 4 + k, IN3_LAYOUT.item.start, t2, '時間表第' + (i + 1) + '節 自動排時間');
+          n++;
+        }
+      });
+      toast(n ? '✏️ 已排好 ' + n + ' 項時間（草稿）——撳💾寫入' : '未有填「需時」嘅項目', n ? 'ok' : '');
+      UI.rerenderPage();
+    });
+    card.appendChild(h('div', { class: 'btn-row', style: { margin: '8px 0' } },
+      autoBtn,
+      h('span', { class: 'row-sub' }, '合計需時：' + totalMins + ' 分鐘')));
+    card.appendChild(h('div', { class: 'table-scroll' }, h('table', { class: 'data-table' },
+      h('thead', null, h('tr', null,
+        h('th', null, '#'), h('th', null, '時間'), h('th', null, '需時（分鐘）'), h('th', null, '項目'), h('th', null, '負責人'))),
+      h('tbody', null, rows))));
+    root.appendChild(card);
+  });
+}
+
+/* ── 區會審核摘要（CL 起表後,區管理層連結 GS 一睇就批;對應一鍵批核掛載流程） ── */
+function renderReview(root) {
+  const st = Store.state;
+  const info = st.info;
+  const bud = budgetSummary(st);
+  const btnBar = h('div', { class: 'btn-row no-print', style: { marginBottom: '12px' } });
+  btnBar.appendChild(h('button', { class: 'btn btn-primary', onclick: () => { window.print(); } }, '🖨 列印審核摘要'));
+  root.appendChild(btnBar);
+
+  const doc = h('div', { class: 'doc-page' });
+  doc.appendChild(h('div', { class: 'doc-org' }, '香港童軍總會 筲箕灣區'));
+  doc.appendChild(h('div', { class: 'doc-title' }, esc(info.name || '（未命名）')));
+  doc.appendChild(h('div', { class: 'doc-sub' }, '開班審核摘要'));
+
+  const kvs = [
+    ['屆別', info.edition || '—'], ['支部', info.section || '—'],
+    ['專章', info.badge || '—'], ['形式', (info.type1 + (info.type2 ? '／' + info.type2 : '')) || '—'],
+    ['預計收生人數', info.intake === '' ? '—' : info.intake], ['預計收費', info.fee === '' ? '—' : '$' + info.fee],
+    ['班職員人數', info.staff === '' ? '—' : info.staff],
+    ['截止報名', info.deadline ? fmtCNDate(info.deadline) : '—'],
+    ['最遲公佈取錄名單', info.publish ? fmtCNDate(info.publish) : '—'],
+  ];
+  const kvTbl = h('table', { class: 'data-table' });
+  const kvTb = h('tbody', null);
+  for (let i = 0; i < kvs.length; i += 2) {
+    kvTb.appendChild(h('tr', null,
+      h('td', { class: 'td-strong', style: { width: '22%' } }, kvs[i][0]), h('td', null, esc(String(kvs[i][1]))),
+      kvs[i + 1] ? h('td', { class: 'td-strong', style: { width: '22%' } }, kvs[i + 1][0]) : h('td', null, ''),
+      kvs[i + 1] ? h('td', null, esc(String(kvs[i + 1][1]))) : h('td', null, '')));
+  }
+  kvTbl.appendChild(kvTb);
+  doc.appendChild(h('div', { class: 'row-sub' }, '一、基本資料'));
+  doc.appendChild(kvTbl);
+
+  doc.appendChild(h('div', { class: 'row-sub', style: { marginTop: '14px' } }, '二、節次'));
+  if (st.sessions.length) {
+    const sTbl = h('table', { class: 'data-table' });
+    sTbl.appendChild(h('thead', null, h('tr', null,
+      h('th', null, '#'), h('th', null, '日期'), h('th', null, '時間'), h('th', null, '場地'), h('th', null, '上通告'))));
+    const sTb = h('tbody', null);
+    st.sessions.forEach((x, i) => sTb.appendChild(h('tr', null,
+      h('td', { class: 'td-idx' }, String(i + 1)),
+      h('td', null, x.date ? fmtCNDate(x.date) : '—'), h('td', null, esc(x.time || '—')),
+      h('td', null, esc(x.venue || '—')), h('td', null, x.onNotice ? '✔' : '—'))));
+    sTbl.appendChild(sTb);
+    doc.appendChild(sTbl);
+  } else doc.appendChild(h('div', { class: 'doc-note' }, '（未填節次）'));
+
+  doc.appendChild(h('div', { class: 'row-sub', style: { marginTop: '14px' } }, '三、班職員'));
+  if (st.staff.length) {
+    const tTbl = h('table', { class: 'data-table' });
+    tTbl.appendChild(h('thead', null, h('tr', null,
+      h('th', null, '職位'), h('th', null, '姓名'), h('th', null, '稱謂'), h('th', null, '資格標註'))));
+    const tTb = h('tbody', null);
+    st.staff.forEach((x) => tTb.appendChild(h('tr', null,
+      h('td', null, esc(x.role || '—')), h('td', { class: 'td-strong' }, esc(x.name || '—')),
+      h('td', null, esc(x.title || '—')), h('td', null, esc(x.qual || '—')))));
+    tTbl.appendChild(tTb);
+    doc.appendChild(tTbl);
+  } else doc.appendChild(h('div', { class: 'doc-note' }, '（未填職員）'));
+
+  doc.appendChild(h('div', { class: 'row-sub', style: { marginTop: '14px' } }, '四、預算（Input01）'));
+  const bTbl = h('table', { class: 'data-table' });
+  bTbl.appendChild(h('thead', null, h('tr', null, h('th', null, '分類'), h('th', null, '預算'))));
+  const bTb = h('tbody', null);
+  bud.sections.forEach((x) => bTb.appendChild(h('tr', null,
+    h('td', null, esc(x.label)), h('td', { class: 'td-num' }, x.budget ? '$' + x.budget : '—'))));
+  bTb.appendChild(h('tr', null, h('td', { class: 'td-total' }, '合計'), h('td', { class: 'td-total td-num' }, '$' + bud.total)));
+  bTbl.appendChild(bTb);
+  doc.appendChild(bTbl);
+
+  doc.appendChild(h('div', { class: 'doc-note' },
+    '區會審核流程：①連結本訓練班工作簿（GS）②核對以上內容（有修改要求請 CL 喺系統改）③一鍵批核＋掛載通告（成員系統報名）。',
+    h('br'), '本班收入支出會照預算對數；完成後嘅合格名單＋證書編號會喺「Print_訓練班完成報告」，區會讀取後連結成員系統紀錄。'));
+  const signs = h('div', { style: { display: 'flex', justifyContent: 'space-around', marginTop: '46px' } });
+  signs.appendChild(h('div', { class: 'doc-sign' }, h('div', { class: 'doc-sign-title' }, '班領導人')));
+  signs.appendChild(h('div', { class: 'doc-sign' }, h('div', { class: 'doc-sign-title' }, '區總監（批核）')));
+  signs.appendChild(h('div', { class: 'doc-sign' }, h('div', { class: 'doc-sign-title' }, '日期')));
+  doc.appendChild(signs);
+  root.appendChild(doc);
 }
 
 /* ── Input02 班資料 ── */

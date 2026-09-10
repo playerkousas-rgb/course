@@ -189,15 +189,106 @@ function mockSeedState() {
   };
   st.sheets[TAB.IN1] = IN1; st.sheets[TAB.IN2] = IN2;
   st.sheets[TAB.IN4] = IN4; st.sheets[TAB.RESP] = RESP; st.sheets[TAB.NOTICE] = NOTICE;
-  st.sheets[TAB.IN3] = mockGrid(32, 6);
+  /* Input03 時間表（每節 10 行 block:R2 起;每節 5 行 rundown） */
+  const IN3 = mockGrid(95, 8);
+  const in3Block = (head, date, time, venue, dress, items) => {
+    mockSet(IN3, head, 2, '日期：'); mockSet(IN3, head, 3, date);
+    mockSet(IN3, head, 5, '地點：'); mockSet(IN3, head, 6, venue);
+    mockSet(IN3, head + 1, 2, '時間：'); mockSet(IN3, head + 1, 3, time);
+    mockSet(IN3, head + 1, 5, '服裝：'); mockSet(IN3, head + 1, 6, dress);
+    ['時 間', '需時（分鐘）', '項目', '負責人'].forEach((t, i) => mockSet(IN3, head + 3, i + 2, t));
+    items.forEach((it, i) => {
+      mockSet(IN3, head + 4 + i, 2, it[0]); mockSet(IN3, head + 4 + i, 3, it[1]);
+      mockSet(IN3, head + 4 + i, 4, it[2]); mockSet(IN3, head + 4 + i, 5, it[3]);
+    });
+  };
+  in3Block(2, '2026-10-17', '1930 - 2130', '筲箕灣區總部', '童軍制服', [
+    ['1930', 5, '報到', '班務行政'], ['1935', 20, '攝影基礎理論', '陳大文'],
+    ['1955', 45, '光圈・快門・構圖實作', '麥俊杰'], ['2040', 40, '分組實習拍攝', '麥俊杰'],
+    ['2135', 20, '作品分享＋宣布事項及解散', '陳大文'],
+  ]);
+  in3Block(12, '2026-10-24', '1930 - 2130', '筲箕灣區總部', '童軍制服', [
+    ['1930', 5, '報到', '班務行政'], ['1935', 30, '夜景長曝技巧', '麥俊杰'],
+    ['2005', 45, '外影實習（區總部外圍）', '陳大文'], ['2050', 40, '照片整理＋後製', '李美芬'],
+  ]);
+  in3Block(22, '2026-11-01', '0900 - 1700', '鰂魚涌海濱公園', '便服（旅巾）', [
+    ['0900', 10, '集合點名', '班務行政'], ['0910', 60, '外影主題講解', '麥俊杰'],
+    ['1010', 120, '戶外實習拍攝', '全體職員'], ['1310', 90, '午膳＋作品篩選', '李美芬'],
+    ['1440', 60, '作品評審＋頒發結業', '陳大文'],
+  ]);
+  st.sheets[TAB.IN3] = IN3;
   st.sheets[TAB.ATTEND] = ATT;
   st.sheets[TAB.COMPLETE] = COMP;
   st.sheets[TAB.CERT] = CERT;
   return st;
 }
 
-/* ── 狀態存取 ── */
+/* ── 空白模版 state（createCourse 用:全部分頁齊、基本資料預填） ── */
+function mockBlankState(nm, b) {
+  b = b || {};
+  const IN1 = mockGrid(105, 13);
+  mockSet(IN1, 1, 2, nm);
+  if (b.edition) mockSet(IN1, 4, 2, b.edition);
+  if (b.section) mockSet(IN1, 5, 2, b.section);
+  if (b.badge) mockSet(IN1, 6, 2, b.badge);
+  mockSet(IN1, 8, 2, '訓練班');
+  if (b.intake) mockSet(IN1, 11, 2, b.intake);
+  if (b.fee) mockSet(IN1, 12, 2, b.fee);
+  if (b.staffN) mockSet(IN1, 13, 2, b.staffN);
+
+  const IN2 = mockGrid(50, 12);
+  mockSet(IN2, 1, 2, nm);
+  if (b.intake) mockSet(IN2, 4, 2, b.intake);
+  if (b.fee) mockSet(IN2, 5, 2, b.fee);
+  if (b.staffN) mockSet(IN2, 6, 2, b.staffN);
+  ['職位', '姓名', '稱謂', '所屬單位 / 職銜', '資格標註', '電話', '電郵'].forEach((h, i) => mockSet(IN2, 22, i + 1, h));
+  if (b.clName) {
+    mockSet(IN2, 23, 1, '班領導人'); mockSet(IN2, 23, 2, b.clName); mockSet(IN2, 23, 3, b.clTitle || '');
+  }
+
+  const IN3 = mockGrid(95, 8);
+  for (let i = 0; i < IN3_LAYOUT.maxBlocks; i++) {
+    const head = IN3_LAYOUT.firstHead + i * IN3_LAYOUT.blockRows;
+    mockSet(IN3, head, 2, '日期：'); mockSet(IN3, head, 5, '地點：');
+    mockSet(IN3, head + 1, 2, '時間：'); mockSet(IN3, head + 1, 5, '服裝：');
+    ['時 間', '需時（分鐘）', '項目', '負責人'].forEach((t, j) => mockSet(IN3, head + 3, j + 2, t));
+  }
+
+  const IN4 = mockGrid(46, 11);
+  mockSet(IN4, 1, 1, '筲箕灣童軍區會'); mockSet(IN4, 2, 1, '活動支出');
+  ['類別', '茶　點', '膳食津貼', '職員膳食', '住　宿', '交通', '行　政', '講義及快勞', '其　他', '設　備', '備註']
+    .forEach((t, i) => mockSet(IN4, 6, i + 1, t));
+  mockSet(IN4, 7, 1, '收據編號');
+  for (let r = 8; r <= 42; r++) mockSet(IN4, r, 1, r - 7);
+
+  const st = { rev: 0, savedAt: '', by: '', sheets: {} };
+  st.sheets[TAB.IN1] = IN1; st.sheets[TAB.IN2] = IN2;
+  st.sheets[TAB.IN3] = IN3; st.sheets[TAB.IN4] = IN4;
+  st.sheets[TAB.RESP] = [RESP_HEADERS.slice()];
+  st.sheets[TAB.NOTICE] = mockGrid(48, 8);
+  st.sheets[TAB.ATTEND] = mockGrid(64, 16);
+  st.sheets[TAB.COMPLETE] = mockGrid(46, 8);
+  st.sheets[TAB.CERT] = mockGrid(44, 8);
+  return st;
+}
+
+/* ── 狀態存取（demo 主班 + CL 起表嘅新班 registry） ── */
 let MOCK_STATE = null;
+let MOCK_CUR = { key: null, state: null };   /* 當次 call 緊嘅課程（新班 persist 用） */
+function mockCourses() {
+  try { return JSON.parse(localStorage.getItem(LS.mockCourses) || '{}') || {}; } catch (e) { return {}; }
+}
+function mockSaveCourses(reg) {
+  try { localStorage.setItem(LS.mockCourses, JSON.stringify(reg)); } catch (e) { /* 忽略 */ }
+}
+function mockResolveState(apiKey) {
+  const k = String(apiKey || '');
+  if (k && k !== MOCK_API_KEY) {
+    const reg = mockCourses();
+    if (reg[k]) return reg[k];
+  }
+  return mockLoad();
+}
 function mockLoad() {
   if (MOCK_STATE) return MOCK_STATE;
   try {
@@ -209,9 +300,19 @@ function mockLoad() {
   return MOCK_STATE;
 }
 function mockPersist() {
-  try { localStorage.setItem(LS.mock, JSON.stringify(mockLoad())); } catch (e) { /* 忽略 */ }
+  try {
+    if (MOCK_CUR.key && MOCK_CUR.state) {
+      const reg = mockCourses();
+      reg[MOCK_CUR.key] = MOCK_CUR.state;
+      localStorage.setItem(LS.mockCourses, JSON.stringify(reg));
+    } else localStorage.setItem(LS.mock, JSON.stringify(mockLoad()));
+  } catch (e) { /* 忽略 */ }
 }
-function mockReset() { MOCK_STATE = mockSeedState(); mockPersist(); }
+function mockReset() {
+  MOCK_STATE = mockSeedState(); MOCK_CUR = { key: null, state: null };
+  mockSaveCourses({});
+  mockPersist();
+}
 
 /* ── 公式模擬（dump時計算值） ── */
 function mockDumpResp(state) {
@@ -239,8 +340,10 @@ function mockDumpIn2(state) {
 function mockOk(d) { return { ok: true, data: d }; }
 function mockErr(m) { return { ok: false, error: m }; }
 function mockAuth(b) {
-  return String((b && b.apiKey) || '') === MOCK_API_KEY
-    ? null : mockErr('Unauthorized: invalid or missing apiKey');
+  const k = String((b && b.apiKey) || '');
+  if (k === MOCK_API_KEY) return null;
+  if (k && mockCourses()[k]) return null;
+  return mockErr('Unauthorized: invalid or missing apiKey');
 }
 function mockDelay() {
   return new Promise((res) => setTimeout(res, 220 + Math.floor(Math.random() * 260)));
@@ -268,9 +371,21 @@ function mockCheckBaseRev(state, baseRev) {
 const MockAPI = {
   call: async function (action, b) {
     await mockDelay();
-    const state = mockLoad();
+    const isNewCourse = !!(b && b.apiKey && b.apiKey !== MOCK_API_KEY && mockCourses()[b.apiKey]);
+    MOCK_CUR = isNewCourse ? { key: b.apiKey, state: mockCourses()[b.apiKey] } : { key: null, state: null };
+    const state = isNewCourse ? MOCK_CUR.state : mockLoad();
     const authFail = mockAuth(b);
-    if (authFail && action !== 'getCourseProfile') return authFail;
+    if (authFail && action !== 'getCourseProfile' && action !== 'createCourse') return authFail;
+    if (action === 'createCourse') {
+      /* 區級 CourseFactory 合約:CL 起表（copy 模版 → 新 apiKey → 空白模版） */
+      const nm = String(b.courseName || '').trim();
+      if (!nm) return mockErr('請填課程名稱');
+      const key = 'ck_new_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+      const reg = mockCourses();
+      reg[key] = mockBlankState(nm, b);
+      mockSaveCourses(reg);
+      return mockOk({ exec: 'mock', apiKey: key, courseId: key, courseName: nm, firstLogin: true });
+    }
     if (action === 'getCourseProfile') {
       /* 連線測試用：唔驗 key 都回基本料（方便手快貼錯都知） */
       const in2 = state.sheets[TAB.IN2];

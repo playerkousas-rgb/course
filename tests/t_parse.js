@@ -84,8 +84,17 @@ const certG = [];
 certG[5] = ['', '學員編號', '中文姓名', '旅號', '證書編號', '領取日期', '簽收'];  /* R6 表頭 */
 certG[6] = ['', 1, '王小明', '82', 'SPG-2026-001', '', ''];                   /* R7 未領取 */
 
+/* Input03 時間表 grid（每節 10 行 block,R2 起） */
+const in3 = [];
+in3[1] = ['', '日期：', '2026-10-17', '', '地點：', '筲箕灣區總部'];
+in3[2] = ['', '時間：', '1930 - 2130', '', '服裝：', '童軍制服'];
+in3[4] = ['', '時 間', '需時（分鐘）', '項目', '負責人'];
+in3[5] = ['', '1930', 5, '報到', '班務行政'];
+in3[6] = ['', '1935', 45, '光圈實作', '陳大文'];
+in3[11] = ['', '日期：', '2026-10-24', '', '地點：', '筲箕灣區總部'];
+
 const raw = {
-  input01: in1, input02: in2, input03: [], input04: [],
+  input01: in1, input02: in2, input03: in3, input04: [],
   resp: resp, attend: att, completion: comp, cert: certG,
   paramsWX: [
     ['區會常數（唔好改名）', ''],
@@ -116,6 +125,16 @@ ok(p.regs[0].pcheck, '已核對收款 ✔');
 ok(p.regs[0].pcBy === '區會財務', '核對人');
 ok(p.regs[0].sta, 'STA 正本已交');
 ok(p.regs[1].pcheck === false, '第二筆未核對收款 → false');
+section('時間表 parseInput03');
+eq(p.input03.blocks.length, 2, '兩個有料 block');
+eq(p.input03.blocks[0].date, '2026-10-17', 'block1 日期');
+eq(p.input03.blocks[0].time, '1930 - 2130', 'block1 時間');
+eq(p.input03.blocks[0].dress, '童軍制服', 'block1 服裝');
+eq(p.input03.blocks[0].items.length, 2, 'block1 兩個項目');
+eq(p.input03.blocks[0].items[1].mins, 45, 'block1 項目2 需時');
+eq(p.input03.blocks[1].date, '2026-10-24', 'block2 日期');
+eq(p.input03.blocks[1].items.length, 0, 'block2 冇項目');
+
 section('完成報告 parseCompletion');
 eq(p.completion.decided, 1, '已評核 1（李嘉俊未取錄唔計）');
 ok(p.completion.byStudent[p.regs[0].id].pass === true, '王小明合格');

@@ -51,6 +51,40 @@ gs/
 - **訓練班管理系統（本 repo）**：已支援——`auth` 通 → v5 流程（首次登入提示改密碼）；冇 `auth` → 自動退回舊版本機閘（完全向下相容）
 - **區管理系統／成員系統**：唔需要即刻改（所有舊 action 原封不動）；想 feature-detect 就試 call `auth`
 
+## CL 起表（CourseFactory，取代舊版 CS 起表）
+
+由 coursev5.1 起，起表工序由 APP 發動：CL 喺連線畫面「🆕 新開班」填課程名／屆別／支部／專章／收生／收費／班領導人 → 呼叫區級 `CourseFactory.gs`（`apps-script/CourseFactory.gs`，獨立專案部署一次）→ copy 開班文件模版＋預填資料＋產 apiKey → APP 即刻連線（首次密碼 1234）。之後照舊：區管理層連結 GS → 睇 APP「開班文件 → 📤 區會審核」摘要 → 一鍵批核掛載通告（成員系統報名）。
+
+### 課程 Script 要加嘅一段（apiKey bootstrap）
+
+模版 GS 連 bound script 一齊 copy，但 Script Properties（`API_KEY_HASH`）唔會跟住 copy。喺 `doPost`／`doGet` 開頭加：
+
+```js
+function ensureApiKey() {
+  const p = PropertiesService.getScriptProperties();
+  if (p.getProperty('API_KEY_HASH')) return;
+  const sync = SpreadsheetApp.getActive().getSheetByName('_Sync');
+  const k = sync ? String(sync.getRange('A5').getValue() || '').trim() : '';
+  if (k) {
+    p.setProperty('API_KEY_HASH', sha256hex(k));   // 同 Auth.gs 用嘅 hash 函數
+    sync.getRange('A5').clearContent();            // bootstrap key 用完即清
+  }
+}
+```
+
+流程：CourseFactory 起新班時將 apiKey 寫 `_Sync!A5` → 課程 Script 第一次收到請求就 adopt（hash 入 Properties、清 A5）→ 之後同一般班完全一樣。CL 唔使接觸任何 key 設定。
+
+### 部署清單（區管理層，一次）
+
+1. 開新 Apps Script 專案 → 貼 `CourseFactory.gs` → 填 Script Properties（`FACTORY_KEY_HASH`／`TEMPLATE_FILE_ID`／`FOLDER_ID`／`COURSE_API_EXEC`）
+2. 模版 GS 嘅 bound script 加 `ensureApiKey()`（上面嗰段）
+3. 部署 CourseFactory 做網頁應用程式（任何人）→ `/exec` 網址＋開班碼發俾 CL
+4. CL 開 APP → 🆕 新開班 → 🏛 連區會起表 → 填 form → 起表完成即刻入新班
+
+### 多班共用 API（可選）
+
+唔想逐班部署 `/exec` 的話，可以擴充 CourseFactory 做共用 Course API：`COURSES_REGISTRY` 記 `{apiKey → fileId}`，所有 action 用 `SpreadsheetApp.openById(fileId)` 行同一套 router。十幾班規模都其實逐班部署都夠。
+
 ## 密碼規則一覽
 
 - 每班第一次登入：`1234`（前端會即刻彈「請設定新密碼」，可以稍後，下次登入會再提示）

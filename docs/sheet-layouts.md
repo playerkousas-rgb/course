@@ -20,6 +20,13 @@ AC 接納✔✗・AD 旅號(公式)・AE Region flag・AF Troop flag・AG Seq in
 - 服務時數唔寫入表——APP 照 Input02 每節時間（跨日自動 +24h）即場計
 - 讀取按名/編號對返（唔靠行位）；名單同取錄有出入 → stale →「對齊名單」（剔號會照搬去新位）
 
+## Input03 時間表（APP 編輯;每節一個 10 行 block）
+- 第 i 節 head 行 = 2+(i-1)×10;R(head)：B「日期：」C 值・E「地點：」F 值
+- R(head+1)：B「時間：」C 值・E「服裝：」F 值
+- R(head+3) 表頭：B 時間・C 需時（分鐘）・D 項目・E 負責人;R(head+4 至 head+8) rundown（5 行/節）
+- 模版跨午夜會寫 `-45`（完結時間倒數）;APP「自動排時間」照累計（顯示實際 HHMM）
+- 最多 9 節（同 Input02 節次對應;APP 由 Input02 節次驅動 block 數）
+
 ## Print_合格名單（67-complete.js 合格名單列印參考）
 - 同取錄名單兩欄式（C 編號/D 姓名/E 旅別 ‖ G/H/I），19-35 行
 - B36 註：「尚未領取證書之學員，可於區會辦公時間前往區總部領取證書。區會辦公時間請參閱 www.skwscout.org.hk。」

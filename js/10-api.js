@@ -12,15 +12,16 @@ function apiNormalizeError(data) {
   return data;
 }
 
-async function apiCall(action, payload) {
+async function apiCall(action, payload, opts) {
   payload = payload || {};
-  const course = Store.activeCourse();
+  opts = opts || {};
+  const course = opts.exec ? { exec: opts.exec, key: opts.key || '', mock: false } : Store.activeCourse();
   if (!course) return { ok: false, error: '未連線' };
 
-  /* 演示模式 → mock 後端（同一合約） */
+  /* 演示模式 → mock 後端（同一合約;起表嘅新班用自己 key） */
   if (course.mock) {
     try {
-      return await MockAPI.call(action, Object.assign({ apiKey: MOCK_API_KEY }, payload));
+      return await MockAPI.call(action, Object.assign({ apiKey: course.key || MOCK_API_KEY }, payload));
     } catch (e) {
       return { ok: false, error: '演示後台錯誤：' + (e && e.message) };
     }

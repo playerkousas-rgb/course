@@ -40,14 +40,14 @@ const Store = {
     return this.courses().filter(c => c.id === id)[0] || null;
   },
   addCourse: function (o) {
-    const id = o.mock ? 'demo' : courseHash((o.exec || '') + '|' + (o.key || ''));
+    const id = o.mock ? (o.id || 'demo') : courseHash((o.exec || '') + '|' + (o.key || ''));
     const existing = this.courses().filter(c => c.id === id)[0];
     if (existing) {
       existing.name = o.name || existing.name;
       existing.exec = o.exec || existing.exec;
       existing.key = o.key || existing.key;
     } else {
-      this.config.courses.push({ id: id, name: o.name || '未命名訓練班', exec: o.exec || '', key: o.key || '', mock: !!o.mock, savedAt: new Date().toISOString() });
+      this.config.courses.push({ id: id, name: o.name || '未命名訓練班', exec: o.exec || '', key: o.key || '', mock: !!o.mock, fresh: !!o.fresh, savedAt: new Date().toISOString() });
     }
     this.saveConfig();
     return id;

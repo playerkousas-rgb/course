@@ -180,6 +180,35 @@ async function main() {
   const ct2 = await MockAPI.call('setCertRow', { apiKey: KEY, name: '陳美琪', pickupDate: '2026-12-02', signed: '✔' });
   ok(ct2.ok && ct2.data.row > 7, '陳美琪開新行');
 
+  /* ══ createCourse（CL 起表:新空白模版班,唔影響原有班） ══ */
+  section('createCourse CL 起表');
+  MockDemo.reset();
+  let badCr = await MockAPI.call('createCourse', { courseName: '' });
+  ok(!badCr.ok, '冇課程名 → 拒絕');
+  const cc = await MockAPI.call('createCourse', { courseName: '遠足專科徽章訓練班', edition: 1, section: '童軍', badge: '興趣 - 遠足', intake: 20, fee: 80, clName: '陳大文' });
+  ok(cc.ok && /^ck_new_/.test(cc.data.apiKey), '起表 ok（新 apiKey）');
+  const NK = cc.data.apiKey;
+  const nRaw = await MockAPI.call('getCourseSheetRaw', { apiKey: KEY });
+  /* KEY 係 demo——先驗新班 */
+  const nDump = (await MockAPI.call('getCourseSheetRaw', { apiKey: NK })).data;
+  ok(String(nDump.input01[0][1]) === '遠足專科徽章訓練班', '新班課程名已入 Input01');
+  ok(Array.isArray(nDump.resp) && nDump.resp[0].length === RESP_HEADERS.length, '新班 RESP 表頭齊');
+  ok(String(nDump.input04[5][0]) === '類別', '新班 Input04 支出表頭齊');
+  ok(nDump.rev === 0, '新班 rev 0');
+  const au2 = await MockAPI.call('auth', { apiKey: NK, password: '1234' });
+  ok(au2.ok && au2.data.firstLogin === true, '新班首次 1234（firstLogin）');
+  /* 新班寫入 → 自己 rev bump */
+  const sv2 = await MockAPI.call('saveCourseBatch', { apiKey: NK, cells: [{ tab: TAB.IN1, row: 11, col: 2, value: 24 }], by: '陳大文' });
+  ok(sv2.ok && sv2.data.rev === 1, '新班寫入 bump rev');
+  /* demo 班完全冇受影響 */
+  const dRaw = (await MockAPI.call('getCourseSheetRaw', { apiKey: KEY })).data;
+  ok(String(dRaw.input01[0][1]) === '攝影專科徽章訓練班', 'demo 班冇被影響');
+  ok(dRaw.rev === 0, 'demo rev 冇被影響');
+  /* 唔存在嘅 key → Unauthorized */
+  const un = await MockAPI.call('getCourseSheetRaw', { apiKey: 'ck_no_such' });
+  ok(!un.ok && /Unauthorized/.test(un.error), '唔存在嘅 key → Unauthorized');
+  MockDemo.reset();
+
   done();
 }
 main().catch((e) => { console.error(e); process.exit(1); });

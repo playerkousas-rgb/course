@@ -366,6 +366,32 @@ function parseCompletion(grid, regs) {
   return out;
 }
 
+/* ── Input03 時間表（每節 10 行 block;R(head) 日期/地點、R(head+1) 時間/服裝、head+4 起 rundown） ── */
+function parseInput03(grid) {
+  const out = { blocks: [] };
+  if (!Array.isArray(grid)) return out;
+  const get = (r, c) => String((grid[r - 1] && grid[r - 1][c - 1]) != null ? grid[r - 1][c - 1] : '').trim();
+  for (let i = 0; i < IN3_LAYOUT.maxBlocks; i++) {
+    const head = IN3_LAYOUT.firstHead + i * IN3_LAYOUT.blockRows;
+    if (head > grid.length) break;
+    const date = normDate(get(head, IN3_LAYOUT.date.c));
+    const venue = get(head, IN3_LAYOUT.venue.c);
+    const time = get(head + IN3_LAYOUT.time.dr, IN3_LAYOUT.time.c);
+    const dress = get(head + IN3_LAYOUT.dress.dr, IN3_LAYOUT.dress.c);
+    const items = [];
+    for (let k = 0; k < IN3_LAYOUT.items; k++) {
+      const r = head + 4 + k;
+      const name = get(r, IN3_LAYOUT.item.name);
+      const mins = get(r, IN3_LAYOUT.item.mins);
+      if (!name && !mins) continue;
+      items.push({ start: get(r, IN3_LAYOUT.item.start), mins: Number(mins) || 0, name: name, owner: get(r, IN3_LAYOUT.item.owner) });
+    }
+    if (!date && !venue && !time && !items.length) continue;
+    out.blocks.push({ date: date, venue: venue, time: time, dress: dress, items: items });
+  }
+  return out;
+}
+
 /* ── 領取證書（Print_領取證書紀錄 R7 起：B學員編號 C姓名 D旅號 E證書編號 F領取日期 G簽收） ── */
 function parseCert(grid, regs) {
   const out = { byStudent: {} };
@@ -394,10 +420,11 @@ function parseAll(raw) {
   const attend = parseAttend(raw.attend, sessions, regs, staff);
   const completion = parseCompletion(raw.completion, regs);
   const cert = parseCert(raw.cert, regs);
+  const input03 = parseInput03(raw.input03);
   const noticeEdits = parseNoticeEdits(raw.notice);
   const leader = staff.filter(s => s.role === '班領導人')[0] || null;
   return {
-    raw, info, sessions, staff, params, regs, noticeEdits, leader, attend, completion, cert,
+    raw, info, sessions, staff, params, regs, noticeEdits, leader, attend, completion, cert, input03,
     stats: regStats(regs, info.quota),
     rev: raw.rev || 0, revBy: raw.revBy || '', revSavedAt: raw.revSavedAt || '',
     pulledAt: raw.pulledAt || '',

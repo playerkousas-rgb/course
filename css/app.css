@@ -100,7 +100,7 @@ code { font-size: 12px; background: var(--gray-bg); padding: 1px 6px; border-rad
 /* ── 底部導覽 ── */
 .app-nav {
   position: fixed; bottom: 0; left: 0; right: 0; z-index: 40;
-  display: flex; background: #fff; border-top: 1px solid var(--line);
+  display: flex; flex-wrap: wrap; background: #fff; border-top: 1px solid var(--line);
   padding-bottom: env(safe-area-inset-bottom);
 }
 .nav-btn {

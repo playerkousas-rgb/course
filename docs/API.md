@@ -18,6 +18,7 @@
 | `setPaymentCheck` | `id`(=時間戳記),`verified`,`by` | `{saved,row,verified}` | **區管理系統用**：核對區帳戶後 tick「已核對收款」；identity 定位、唔 bump rev、自動補表頭 |
 | `getCourseSheetRaw` | — | `{input01,input02,input03,input04,resp,paramsWX,notice,attend,accept,finance,completion,cert,subsidy,pulledAt,rev,revSavedAt,revBy}` | 主同步（15 秒輪詢）；rev 供樂觀鎖；`attend`（Print_學員出席紀錄）係 coursev5 加嘅 dump |
 | `getCourseProfile` | — | 課程結構資料 | 連線測試＋解鎖頁職員名單 |
+| `createCourse` | `masterKey`(開班碼),`courseName`,`edition?,section?,badge?,intake?,fee?,clName?` | `{exec,apiKey,courseId,courseName,firstLogin}` | **區級 CourseFactory**（`apps-script/CourseFactory.gs` 獨立部署）:CL 起表——copy 模版＋預填＋產 apiKey;APP 即刻連線 |
 | `setRegStatus` | `id`(=時間戳記),`status`(pending/approved/rejected/cancelled),`reviewer` | `{saved,id,status}` | 收生：接納/拒絕/取消。**唔檢查 rev、唔 bump rev**（identity 定位，安全） |
 | `saveCourseBatch` | `cells[{tab,row,col,value}]`,`baseRev`,`by` | `{saved,rev,savedAt,updated,skippedTabs}` | 批次寫格（開班文件／通告／分組） |
 | `addExpenseRow` | `amounts{B..J}`,`note` | `{added,row,receiptNo}` | 〔二階段〕支出 append-only，唔撞 rev |
@@ -35,6 +36,7 @@
 - `_Sync` 隱藏分頁：A1 rev／B1 savedAt／C1 by
 - `setCourseCells`／`setCompletionRow`／`setCertRow`／`saveCourseBatch`（有 cells/completion/cert）→ **驗 baseRev＋bump rev**
 - `setRegStatus`／`addReg`／`addExpenseRow` → **唔驗唔 bump**（append／identity 性質）
+- `createCourse` → 驗**開班碼**（masterKey，唔係逐班 apiKey）；新班 rev 由 0 開始
 - baseRev 唔帶＝照寫（舊部署相容）
 - 衝突回 `{ok:false,conflict:true,…}`——今次乜都冇寫入
 

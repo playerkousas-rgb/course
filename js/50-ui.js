@@ -188,8 +188,80 @@ const UI = {
         h('div', { class: 'btn-row' },
           h('button', { class: 'btn btn-primary', onclick: () => doConnect(false) }, '🔗 連線'),
           h('button', { class: 'btn', onclick: () => doConnect(true) }, '📊 演示模式'))),
+      this.renderNewCourse(),
       savedList,
       h('div', { class: 'foot-note' }, '共職員密碼預設 1234（進入後可改）・純前端，資料直接同每班 Google Sheet 對話')));
+  },
+
+  /* ── 🆕 新開班（CL 起表:createCourse copy 模版 → 新 apiKey → 空白班） ── */
+  renderNewCourse: function () {
+    const card = h('div', { class: 'card' });
+    card.appendChild(h('div', { class: 'card-title' }, '🆕 新開班（CL 起表）'));
+    card.appendChild(h('div', { class: 'row-sub' },
+      '由呢度起一張新訓練班工作簿（照區模版）——填好基本資料即刻起表，之後喺 APP 填預算／節次／時間表／通告，完成後交區會批核掛載（通告＋成員系統報名）。'));
+
+    const nmIn = h('input', { class: 'input', type: 'text', placeholder: '例：遠足專科徽章訓練班（必填）' });
+    const edIn = h('input', { class: 'input', type: 'number', placeholder: '屆別，例：2（可選）' });
+    const secSel = h('select', { class: 'input' },
+      h('option', { value: '' }, '支部（可選）'),
+      BRANCH_OPTIONS.map(o => h('option', { value: o }, o)));
+    const badgeIn = h('input', { class: 'input', type: 'text', placeholder: '專章，例：興趣 - 遠足（可選）' });
+    const intakeIn = h('input', { class: 'input', type: 'number', placeholder: '預計收生人數（可選）' });
+    const feeIn = h('input', { class: 'input', type: 'number', placeholder: '預計收費（元，可選）' });
+    const clIn = h('input', { class: 'input', type: 'text', placeholder: '班領導人姓名（可選，建議填）' });
+    const factoryIn = h('input', { class: 'input', type: 'url', placeholder: 'https://script.google.com/macros/s/…/exec（區會 CourseFactory 網址）' });
+    const masterIn = h('input', { class: 'input', type: 'text', placeholder: '區會開班碼（向 ADC／區管理層攞）' });
+    const realRows = h('div', null,
+      h('div', { class: 'field' }, h('label', { class: 'flabel' }, '區會開班網址（CourseFactory /exec）'), factoryIn),
+      h('div', { class: 'field' }, h('label', { class: 'flabel' }, '開班碼'), masterIn));
+    realRows.style.display = 'none';
+    const msg = h('div', { class: 'form-msg' });
+
+    async function doCreate(mockMode) {
+      msg.textContent = ''; msg.className = 'form-msg';
+      const nm = nmIn.value.trim();
+      if (!nm) { msg.textContent = '請填課程名稱。'; msg.className = 'form-msg err'; return; }
+      const payload = {
+        courseName: nm, edition: edIn.value, section: secSel.value, badge: badgeIn.value,
+        intake: intakeIn.value, fee: feeIn.value, clName: clIn.value.trim(),
+      };
+      let res;
+      if (mockMode) {
+        try { res = await MockAPI.call('createCourse', payload); }
+        catch (e) { res = { ok: false, error: '演示後台錯誤：' + (e && e.message) }; }
+      } else {
+        const fx = factoryIn.value.trim(), mk = masterIn.value.trim();
+        if (!fx || !mk) { realRows.style.display = ''; msg.textContent = '請填區會開班網址同開班碼（向區管理層攞）。'; msg.className = 'form-msg err'; return; }
+        payload.masterKey = mk;
+        res = await apiCall('createCourse', payload, { exec: fx, key: mk });
+      }
+      if (!res || !res.ok) { msg.textContent = '起表失敗：' + ((res && res.error) || '未知錯誤'); msg.className = 'form-msg err'; return; }
+      const d = res.data;
+      const id = mockMode
+        ? Store.addCourse({ mock: true, id: d.apiKey, key: d.apiKey, name: nm, fresh: true })
+        : Store.addCourse({ exec: d.exec, key: d.apiKey, name: nm, fresh: true });
+      Store.setActive(id);
+      toast('✅ 已起表「' + nm + '」——首次密碼 1234，入去先改密碼，之後去「開班文件」填預算／節次／時間表', 'ok');
+      UI.render();
+    }
+
+    card.appendChild(h('div', { class: 'grid-2c' },
+      h('div', { class: 'field' }, h('label', { class: 'flabel' }, '課程名稱＊'), nmIn),
+      h('div', { class: 'field' }, h('label', { class: 'flabel' }, '屆別'), edIn),
+      h('div', { class: 'field' }, h('label', { class: 'flabel' }, '支部'), secSel),
+      h('div', { class: 'field' }, h('label', { class: 'flabel' }, '專章'), badgeIn),
+      h('div', { class: 'field' }, h('label', { class: 'flabel' }, '預計收生人數'), intakeIn),
+      h('div', { class: 'field' }, h('label', { class: 'flabel' }, '預計收費（元）'), feeIn),
+      h('div', { class: 'field' }, h('label', { class: 'flabel' }, '班領導人姓名'), clIn)));
+    card.appendChild(realRows);
+    card.appendChild(msg);
+    card.appendChild(h('div', { class: 'btn-row' },
+      h('button', { class: 'btn btn-primary', onclick: () => doCreate(true) }, '🚀 起表（演示）'),
+      h('button', { class: 'btn', onclick: () => {
+        if (realRows.style.display === 'none') { realRows.style.display = ''; toast('填好區會開班網址＋開班碼再撳「🏛 連區會起表」'); return; }
+        doCreate(false);
+      } }, '🏛 連區會起表')));
+    return card;
   },
 
   /* ── 解鎖畫面（密碼＋職員名） ── */

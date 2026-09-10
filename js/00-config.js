@@ -202,6 +202,16 @@ const RAW_TAB_MAP = {
 };
 
 /* ── localStorage 鍵 ── */
+/* Input03 時間表:每節一個 10 行 block,第 1 節 R2 起(block i head 行 = 2+(i-1)×10)
+   R(head):B「日期:」C 值・E「地點:」F 值;R(head+1):B「時間:」C 值・E「服裝:」F 值
+   R(head+3) 表頭;R(head+4 至 head+8) rundown:B 時間・C 需時(分鐘)・D 項目・E 負責人 */
+const IN3_LAYOUT = {
+  firstHead: 2, blockRows: 10, items: 5, maxBlocks: 9,
+  date:  { dr: 0, c: 3 }, venue: { dr: 0, c: 6 },
+  time:  { dr: 1, c: 3 }, dress: { dr: 1, c: 6 },
+  item:  { start: 2, mins: 3, name: 4, owner: 5 },
+};
+
 const LS = {
   config: 'courseapp.config.v1',
   drafts: id => 'courseapp.drafts.' + id,
@@ -209,5 +219,6 @@ const LS = {
   staff: id => 'courseapp.staff.' + id,
   qr: id => 'courseapp.qr.' + id,
   mock: 'courseapp.mock.v1',
+  mockCourses: 'courseapp.mockcourses.v1',
 };
 const SS_UNLOCKED = 'courseapp.unlocked';
