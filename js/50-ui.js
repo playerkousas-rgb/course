@@ -93,6 +93,7 @@ const ROUTES = [
   { id: 'roster', label: '學員', icon: '👥' },
   { id: 'attend', label: '簽到', icon: '✍️' },
   { id: 'finance', label: '收支', icon: '💵' },
+  { id: 'complete', label: '完成', icon: '🎓' },
 ];
 const PAGES = {};
 function regPage(id, fn) { PAGES[id] = fn; }

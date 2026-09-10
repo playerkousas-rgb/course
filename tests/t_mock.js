@@ -149,6 +149,37 @@ async function main() {
   pcRaw = await MockAPI.call('getCourseSheetRaw', { apiKey: KEY });
   ok(pcRaw.data.rev === pcRev, 'setPaymentCheck 唔 bump rev（同 GAS 語義一致）');
 
+  /* ══ setCompletionRow / setCertRow（完成評核＋領取證書） ══ */
+  section('setCompletionRow 完成評核');
+  MockDemo.reset();
+  let crRaw = await MockAPI.call('getCourseSheetRaw', { apiKey: KEY });
+  const crRev0 = crRaw.data.rev;
+  let cr = await MockAPI.call('setCompletionRow', { apiKey: KEY, name: '李嘉俊', pass: true, certNo: 'SPG-2026-002', by: '陳大文' });
+  ok(cr.ok && cr.data.updated === true, '李嘉俊評合格 ok');
+  crRaw = await MockAPI.call('getCourseSheetRaw', { apiKey: KEY });
+  let crRow = crRaw.data.completion[10];                       /* R11 */
+  ok(String(crRow[0]) === '2' && crRow[1] === '李嘉俊' && crRow[4] === '合格' && crRow[3] === 'SPG-2026-002', 'R11 已寫（編號/姓名/證書編號/合格）');
+  ok(crRaw.data.rev === crRev0 + 1, 'bump rev');
+  /* 再評同一人 → 同一行更新，唔會開新行 */
+  cr = await MockAPI.call('setCompletionRow', { apiKey: KEY, name: '李嘉俊', pass: false, failReason: '缺席兩節', by: '陳大文' });
+  crRaw = await MockAPI.call('getCourseSheetRaw', { apiKey: KEY });
+  crRow = crRaw.data.completion[10];
+  ok(crRow[4] === '不合格' && crRow[5] === '缺席兩節' && String(crRow[3]) === 'SPG-2026-002', '同一行改為不合格＋原因');
+  ok(crRaw.data.completion.filter((r) => String(r[1] || '') === '李嘉俊').length === 1, '冇重複行');
+  cr = await MockAPI.call('setCompletionRow', { apiKey: KEY, name: '無人', pass: true });
+  ok(!cr.ok, '搵唔到學員 → 拒絕');
+  cr = await MockAPI.call('setCompletionRow', { apiKey: KEY, name: '李嘉俊', pass: true, baseRev: 0 });
+  ok(!cr.ok && cr.conflict === true, '帶舊 baseRev → conflict（今次冇寫入）');
+
+  section('setCertRow 領取證書');
+  const ct = await MockAPI.call('setCertRow', { apiKey: KEY, name: '王小明', pickupDate: '2026-12-01', signed: '✔', by: '陳大文' });
+  ok(ct.ok && ct.data.row === 7, '王小明 R7 登記領取');
+  const ctRaw = await MockAPI.call('getCourseSheetRaw', { apiKey: KEY });
+  const ctRow = ctRaw.data.cert[6];                            /* R7 */
+  ok(String(ctRow[1]) === '1' && ctRow[5] === '2026-12-01' && ctRow[6] === '✔', 'R7 領取日期＋簽收已寫');
+  const ct2 = await MockAPI.call('setCertRow', { apiKey: KEY, name: '陳美琪', pickupDate: '2026-12-02', signed: '✔' });
+  ok(ct2.ok && ct2.data.row > 7, '陳美琪開新行');
+
   done();
 }
 main().catch((e) => { console.error(e); process.exit(1); });

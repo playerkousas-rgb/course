@@ -234,6 +234,7 @@ textarea.input { resize: vertical; }
 
 /* ── 分段切換 ── */
 .seg { display: flex; gap: 6px; background: #e2e9e7; padding: 4px; border-radius: 12px; margin-bottom: 14px; }
+.seg-row { display: flex; gap: 6px; background: #e2e9e7; padding: 4px; border-radius: 12px; margin-bottom: 14px; flex-wrap: wrap; }
 .seg-btn { flex: 1; border: none; background: none; padding: 8px; border-radius: 9px; font-size: 14px; font-weight: 600; color: var(--ink-2); cursor: pointer; }
 .seg-btn.active { background: #fff; color: var(--pri); box-shadow: var(--shadow); }
 
@@ -363,7 +364,7 @@ textarea.input { resize: vertical; }
 /* ── 列印 ── */
 @media print {
   body { background: #fff; }
-  .app-head, .app-nav, .no-print, .toast-box, .modal-ov, .page-head, .page-note, .seg { display: none !important; }
+  .app-head, .app-nav, .no-print, .toast-box, .modal-ov, .page-head, .page-note, .seg, .seg-row, .stat-row { display: none !important; }
   .app-main { padding: 0; max-width: none; }
   .card { box-shadow: none; border: none; padding: 0; margin: 0; }
   .table-scroll { overflow: visible; }
@@ -404,3 +405,34 @@ textarea.input { resize: vertical; }
   .print-only { display: block; }
   .fin-screen { display: none !important; }   /* 收支頁列印用 doc-page 版，螢幕卡隱藏 */
 }
+
+
+/* ── 完成模組（67-complete） ── */
+.doc-org { text-align: center; font-size: 16px; font-weight: 700; letter-spacing: 4px; margin-bottom: 2px; }
+.doc-sub { text-align: center; font-size: 17px; font-weight: 700; letter-spacing: 6px; margin: 10px 0 20px; text-decoration: underline; }
+.doc-cols { display: flex; gap: 36px; margin-top: 22px; }
+.doc-col { flex: 1; }
+.doc-col .doc-line { margin: 10px 0; font-size: 15.5px; }
+.doc-note { margin: 18px 0 26px; font-size: 13px; line-height: 1.8; }
+.page-break { page-break-before: always; }
+.comp-table td { vertical-align: middle; }
+.comp-table input { padding: 5px 8px; }
+.badge { display: inline-block; border-radius: 999px; font-size: 12px; padding: 2px 10px; background: #e2e9e7; color: var(--ink-2); white-space: nowrap; }
+.badge-ok { background: var(--green-bg, #e4f2e9); color: #1e7a46; }
+.badge-err { background: #fdeaea; color: #b23a3a; }
+.btn-ok.active { background: #1e7a46; border-color: #1e7a46; color: #fff; }
+.btn-err.active { background: #b23a3a; border-color: #b23a3a; color: #fff; }
+
+/* 證書 */
+.cert-page { max-width: 860px; text-align: center; padding: 64px 60px; }
+.cert-org { font-size: 18px; font-weight: 700; letter-spacing: 6px; }
+.cert-title { font-size: 44px; font-weight: 800; letter-spacing: 18px; margin: 40px 0 46px; text-indent: 18px; }
+.cert-body { font-size: 17px; line-height: 2.4; }
+.cert-course { font-size: 19px; font-weight: 700; }
+.cert-name { font-size: 22px; font-weight: 700; border-bottom: 1.5px solid #000; padding: 0 14px 2px; margin: 0 6px; }
+.cert-no { margin: 34px 0 10px; font-size: 14.5px; }
+.cert-sign-row { display: flex; justify-content: space-around; margin-top: 56px; }
+.cert-sign { min-width: 200px; }
+.cert-sign-name { font-size: 15.5px; letter-spacing: 2px; }
+.cert-sign-role { font-size: 13px; margin-top: 6px; color: #444; }
+@media print { .cert-page { page-break-after: always; box-shadow: none; } .cert-page:last-child { page-break-after: auto; } }

@@ -165,6 +165,24 @@ function mockSeedState() {
   mockSet(ATT, 30, 1, '班領導人'); mockSet(ATT, 30, 2, '陳大文'); mockSet(ATT, 30, 3, '先生'); mockSet(ATT, 30, 5, '✔');
   mockSet(ATT, 31, 1, '副班領導人'); mockSet(ATT, 31, 2, '李美芬'); mockSet(ATT, 31, 3, '小姐');
 
+  /* Print_訓練班完成報告 + Print_領取證書紀錄（王小明已評合格） */
+  const COMP = mockGrid(46, 8);
+  mockSet(COMP, 1, 1, '攝影專科徽章訓練班'); mockSet(COMP, 2, 1, '訓練班完成報告');
+  mockSet(COMP, 4, 1, '舉辦日期：'); mockSet(COMP, 4, 3, '2026/10/17, 2026/10/24, 2026/11/1');
+  mockSet(COMP, 5, 1, '報班人數（本區）：'); mockSet(COMP, 5, 5, '報班人數（他區）：');
+  mockSet(COMP, 6, 1, '接納人數（本區）：'); mockSet(COMP, 6, 5, '接納人數（他區）：');
+  mockSet(COMP, 7, 1, '完成人數：'); mockSet(COMP, 7, 5, '合格人數：');
+  ['學員編號', '中文姓名', '旅號', '證書編號', '合格與否', '不合格原因'].forEach((t, i) => mockSet(COMP, 9, i + 1, t));
+  mockSet(COMP, 10, 1, 1); mockSet(COMP, 10, 2, '王小明'); mockSet(COMP, 10, 3, '82');
+  mockSet(COMP, 10, 4, 'SPG-2026-001'); mockSet(COMP, 10, 5, '合格');
+
+  const CERT = mockGrid(44, 8);
+  mockSet(CERT, 1, 2, '領取證書紀錄');
+  mockSet(CERT, 3, 4, '舉辦日期：'); mockSet(CERT, 3, 7, '2026/10/17, 2026/10/24, 2026/11/1');
+  mockSet(CERT, 4, 4, '班領導人：'); mockSet(CERT, 4, 7, '陳大文');
+  ['學員編號', '中文姓名', '旅號', '證書編號', '領取日期', '簽收'].forEach((t, i) => mockSet(CERT, 6, i + 2, t));
+  mockSet(CERT, 7, 2, 1); mockSet(CERT, 7, 3, '王小明'); mockSet(CERT, 7, 4, '82'); mockSet(CERT, 7, 5, 'SPG-2026-001');
+
   const st = {
     rev: 0, savedAt: '', by: '',
     sheets: {},
@@ -173,6 +191,8 @@ function mockSeedState() {
   st.sheets[TAB.IN4] = IN4; st.sheets[TAB.RESP] = RESP; st.sheets[TAB.NOTICE] = NOTICE;
   st.sheets[TAB.IN3] = mockGrid(32, 6);
   st.sheets[TAB.ATTEND] = ATT;
+  st.sheets[TAB.COMPLETE] = COMP;
+  st.sheets[TAB.CERT] = CERT;
   return st;
 }
 
@@ -271,6 +291,8 @@ const MockAPI = {
     if (action === 'auth') return mockPwAuth(state, b);
     if (action === 'setPassword') return mockPwSet(state, b);
     if (action === 'setPaymentCheck') return mockPaymentCheck(state, b);
+    if (action === 'setCompletionRow') return mockSetCompletionRow(state, b);
+    if (action === 'setCertRow') return mockSetCertRow(state, b);
     if (action === 'getCourseSheetRaw') {
       return mockOk({
         input01: state.sheets[TAB.IN1], input02: mockDumpIn2(state),
@@ -285,7 +307,7 @@ const MockAPI = {
         ],
         notice: state.sheets[TAB.NOTICE],
         attend: state.sheets[TAB.ATTEND] || [],
-        accept: [], finance: [], completion: mockGrid(32, 6), cert: mockGrid(30, 7), subsidy: [],
+        accept: [], finance: [], completion: state.sheets[TAB.COMPLETE], cert: state.sheets[TAB.CERT], subsidy: [],
         pulledAt: new Date().toISOString(),
         rev: state.rev, revSavedAt: state.savedAt, revBy: state.by,
       });
@@ -420,6 +442,66 @@ function mockPwSet(state, b) {
   a.fails = 0; a.lockUntil = 0;
   mockPersist();
   return mockOk({ saved: true });
+}
+
+/* setCompletionRow / setCertRow（完成評核＋領取證書；bump rev，baseRev 可選） */
+/* 用 dump 版（mockDumpResp 補 學員編號/旅號 公式值）搵學員 */
+function mockFindReg(state, code, name) {
+  const resp = mockDumpResp(state);
+  for (let i = 1; i < resp.length; i++) {
+    const no = String(resp[i][RC['學員編號'] - 1] || '');
+    const nm = String(resp[i][RC['中文姓名'] - 1] || '');
+    if ((code && no === String(code)) || (!code && name && nm === String(name))) return resp[i];
+  }
+  return null;
+}
+function mockSetCompletionRow(state, b) {
+  const reg = mockFindReg(state, b.code, b.name);
+  if (!reg) return mockErr('找不到該學員');
+  const cf = mockCheckBaseRev(state, b.baseRev);
+  if (cf) return cf;
+  const sheet = state.sheets[TAB.COMPLETE];
+  let row = -1;
+  for (let r = 10; r <= 42; r++) {
+    if (String(sheet[r - 1][0] || '') === String(reg[RC['學員編號'] - 1] || '') && String(sheet[r - 1][1] || '') === reg[RC['中文姓名'] - 1]) { row = r; break; }
+  }
+  if (row < 0) {
+    for (let r = 10; r <= 42; r++) if (!String(sheet[r - 1].join(''))) { row = r; break; }
+    if (row < 0) return mockErr('完成報告已滿');
+    mockSet(sheet, row, 1, reg[RC['學員編號'] - 1] || '');
+    mockSet(sheet, row, 2, reg[RC['中文姓名'] - 1] || '');
+    mockSet(sheet, row, 3, reg[RC['旅號'] - 1] || '');
+  }
+  if (b.certNo !== undefined) mockSet(sheet, row, 4, b.certNo);
+  if (b.pass !== undefined) mockSet(sheet, row, 5, b.pass ? '合格' : '不合格');
+  if (b.failReason !== undefined) mockSet(sheet, row, 6, b.failReason);
+  mockBumpRev(state, b.by || '');
+  mockPersist();
+  return mockOk({ updated: true, row: row, rev: state.rev, savedAt: state.savedAt });
+}
+function mockSetCertRow(state, b) {
+  const reg = mockFindReg(state, b.code, b.name);
+  if (!reg) return mockErr('找不到該學員');
+  const cf = mockCheckBaseRev(state, b.baseRev);
+  if (cf) return cf;
+  const sheet = state.sheets[TAB.CERT];
+  let row = -1;
+  for (let r = 7; r <= 42; r++) {
+    if (String(sheet[r - 1][1] || '') === String(reg[RC['學員編號'] - 1] || '') && String(sheet[r - 1][2] || '') === reg[RC['中文姓名'] - 1]) { row = r; break; }
+  }
+  if (row < 0) {
+    for (let r = 7; r <= 42; r++) if (!String(sheet[r - 1].join(''))) { row = r; break; }
+    if (row < 0) return mockErr('領取證書紀錄已滿');
+    mockSet(sheet, row, 2, reg[RC['學員編號'] - 1] || '');
+    mockSet(sheet, row, 3, reg[RC['中文姓名'] - 1] || '');
+    mockSet(sheet, row, 4, reg[RC['旅號'] - 1] || '');
+  }
+  if (b.certNo !== undefined) mockSet(sheet, row, 5, b.certNo);
+  if (b.pickupDate !== undefined) mockSet(sheet, row, 6, b.pickupDate);
+  if (b.signed !== undefined) mockSet(sheet, row, 7, b.signed);
+  mockBumpRev(state, b.by || '');
+  mockPersist();
+  return mockOk({ updated: true, row: row, rev: state.rev, savedAt: state.savedAt });
 }
 
 /* setPaymentCheck（區管理系統核對收款用；同 setRegStatus 一樣 identity 定位、唔 bump rev） */

@@ -74,9 +74,19 @@ att[27] = ['職員出席（服務時數自動計）'];                          
 att[28] = ['職位', '姓名', '稱謂'];                                /* R29 表頭 */
 att[29] = ['班領導人', '陳大文', '先生', '', '✔', ''];             /* R30 職員 */
 
+/* 完成報告／領取證書 grid（coursev5 版式） */
+const comp = [];
+comp[8] = ['學員編號', '中文姓名', '旅號', '證書編號', '合格與否', '不合格原因'];   /* R9 表頭 */
+comp[9] = [1, '王小明', '82', 'SPG-2026-001', '合格', ''];                     /* R10 */
+comp[10] = [2, '李嘉俊', '54', '', '不合格', '出席率不足'];                    /* R11（未取錄→唔計） */
+
+const certG = [];
+certG[5] = ['', '學員編號', '中文姓名', '旅號', '證書編號', '領取日期', '簽收'];  /* R6 表頭 */
+certG[6] = ['', 1, '王小明', '82', 'SPG-2026-001', '', ''];                   /* R7 未領取 */
+
 const raw = {
   input01: in1, input02: in2, input03: [], input04: [],
-  resp: resp, attend: att,
+  resp: resp, attend: att, completion: comp, cert: certG,
   paramsWX: [
     ['區會常數（唔好改名）', ''],
     ['成員系統報名網址', 'https://portal.test/training'],
@@ -106,6 +116,17 @@ ok(p.regs[0].pcheck, '已核對收款 ✔');
 ok(p.regs[0].pcBy === '區會財務', '核對人');
 ok(p.regs[0].sta, 'STA 正本已交');
 ok(p.regs[1].pcheck === false, '第二筆未核對收款 → false');
+section('完成報告 parseCompletion');
+eq(p.completion.decided, 1, '已評核 1（李嘉俊未取錄唔計）');
+ok(p.completion.byStudent[p.regs[0].id].pass === true, '王小明合格');
+eq(p.completion.byStudent[p.regs[0].id].certNo, 'SPG-2026-001', '證書編號');
+eq(p.completion.byStudent[p.regs[0].id].row, 10, '行號 R10');
+ok(!p.completion.byStudent[p.regs[1].id], '李嘉俊未有評核');
+section('領取證書 parseCert');
+eq(p.cert.byStudent[p.regs[0].id].certNo, 'SPG-2026-001', '證書編號');
+eq(p.cert.byStudent[p.regs[0].id].pickupDate, '', '未領取');
+eq(p.cert.byStudent[p.regs[0].id].row, 7, '行號 R7');
+
 section('出席表 parseAttend');
 ok(p.attend.initialized, '出席表已初始化');
 ok(p.attend.stale === false, '名單齊（唔 stale）');

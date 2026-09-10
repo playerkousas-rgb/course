@@ -343,6 +343,47 @@ function parseAttend(attend, sessions, regs, staff) {
   return out;
 }
 
+
+/* ── 完成報告（Print_訓練班完成報告 R10 起：A學員編號 B姓名 C旅號 D證書編號 E合格與否 F原因） ── */
+function parseCompletion(grid, regs) {
+  const out = { byStudent: {}, decided: 0 };
+  if (!Array.isArray(grid)) return out;
+  const get = (r, c) => String((r && r[c - 1]) != null ? r[c - 1] : '').trim();
+  const approved = regs.filter(r => r.status === 'approved');
+  for (let i = 9; i < grid.length && i < 50; i++) {
+    const r = grid[i];
+    const no = get(r, 1), name = get(r, 2);
+    if (!no && !name) continue;
+    const v = get(r, 5);
+    if (!v) continue;                      /* 未評核嘅行唔計 */
+    let reg = no ? approved.filter(g => String(g.studentNo) === no)[0] : null;
+    if (!reg) reg = approved.filter(g => g.nameZh === name)[0] || null;
+    if (!reg) continue;
+    const pass = v === '合格' || v === '✔';
+    out.byStudent[reg.id] = { pass: pass, certNo: get(r, 4), failReason: get(r, 6), row: i + 1 };
+    out.decided++;
+  }
+  return out;
+}
+
+/* ── 領取證書（Print_領取證書紀錄 R7 起：B學員編號 C姓名 D旅號 E證書編號 F領取日期 G簽收） ── */
+function parseCert(grid, regs) {
+  const out = { byStudent: {} };
+  if (!Array.isArray(grid)) return out;
+  const get = (r, c) => String((r && r[c - 1]) != null ? r[c - 1] : '').trim();
+  const approved = regs.filter(r => r.status === 'approved');
+  for (let i = 6; i < grid.length && i < 50; i++) {
+    const r = grid[i];
+    const no = get(r, 2), name = get(r, 3);
+    if (!no && !name) continue;
+    let reg = no ? approved.filter(g => String(g.studentNo) === no)[0] : null;
+    if (!reg) reg = approved.filter(g => g.nameZh === name)[0] || null;
+    if (!reg) continue;
+    out.byStudent[reg.id] = { certNo: get(r, 5), pickupDate: get(r, 6), signed: get(r, 7), row: i + 1 };
+  }
+  return out;
+}
+
 function parseAll(raw) {
   raw = raw || {};
   const info = parseCourseInfo(raw.input01, raw.input02);
@@ -351,10 +392,12 @@ function parseAll(raw) {
   const params = parseParamsWX(raw.paramsWX);
   const regs = parseRegs(raw.resp);
   const attend = parseAttend(raw.attend, sessions, regs, staff);
+  const completion = parseCompletion(raw.completion, regs);
+  const cert = parseCert(raw.cert, regs);
   const noticeEdits = parseNoticeEdits(raw.notice);
   const leader = staff.filter(s => s.role === '班領導人')[0] || null;
   return {
-    raw, info, sessions, staff, params, regs, noticeEdits, leader, attend,
+    raw, info, sessions, staff, params, regs, noticeEdits, leader, attend, completion, cert,
     stats: regStats(regs, info.quota),
     rev: raw.rev || 0, revBy: raw.revBy || '', revSavedAt: raw.revSavedAt || '',
     pulledAt: raw.pulledAt || '',

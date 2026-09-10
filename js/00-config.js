@@ -23,6 +23,8 @@ const TAB = {
   PARAM: '參數',
   NOTICE: 'Print_通告',
   ATTEND: 'Print_學員出席紀錄',
+  COMPLETE: 'Print_訓練班完成報告',
+  CERT: 'Print_領取證書紀錄',
 };
 
 /* ── 表格回應欄（跟模版 44 欄） ── */
@@ -196,6 +198,7 @@ const NOTICE_REMARK_DEFAULTS = [
 const RAW_TAB_MAP = {
   input01: TAB.IN1, input02: TAB.IN2, input03: TAB.IN3, input04: TAB.IN4,
   resp: TAB.RESP, notice: TAB.NOTICE, attend: TAB.ATTEND,
+  completion: TAB.COMPLETE, cert: TAB.CERT,
 };
 
 /* ── localStorage 鍵 ── */

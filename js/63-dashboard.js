@@ -17,6 +17,7 @@ regPage('dashboard', function (root) {
     { ok: st.stats.approved > 0 && st.regs.filter(r => r.status === 'approved').every(r => r.group), label: '⑥ 學員分組', route: 'roster' },
     { ok: !!(st.attend && st.attend.initialized), label: '⑦ 出席表對齊（可以開始點名）', route: 'attend' },
     { ok: financeSummary(st).used > 0, label: '⑧ 收支記錄（有支出入帳）', route: 'finance' },
+    { ok: !!(st.completion && st.completion.decided > 0), label: '⑨ 完成評核（' + ((st.completion && st.completion.decided) || 0) + ' 位已評）', route: 'complete' },
   ];
   const done = steps.filter(s => s.ok).length;
 
