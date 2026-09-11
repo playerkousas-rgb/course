@@ -9,6 +9,28 @@ let _intakeSearch = '';
 const _intakeSel = new Set();
 const _busyIds = new Set();
 
+async function sendRegNotices(ids) {
+  const st = Store.state;
+  if (!st) return;
+  const targets = (ids && ids.length ? st.regs.filter(r => ids.indexOf(r.id) >= 0) : st.regs)
+    .filter(r => (r.status === 'approved' || r.status === 'rejected') && !r.noticeSent);
+  if (!targets.length) { toast('冇需要寄出嘅通知書（只會寄已接納／已拒絕而未寄嘅報名）', 'info'); return; }
+  const yes = await confirmDlg('發出接納及不接納通知書',
+    '準備由訓練班系統寄出 ' + targets.length + ' 封通知書。\n\n' +
+    '接納／不接納由本 App 名單狀態決定；申請人回覆會去通告上的訓練班電郵／班信箱。已寄紀錄會寫入表格回應 AZ/BA，避免重複寄。');
+  if (!yes) return;
+  const res = await apiCall('sendRegNotice', { ids: targets.map(r => r.id), by: Store.staffName() || '' });
+  if (res && res.ok) {
+    const d = res.data || {};
+    toast('✅ 通知書已處理：成功 ' + (d.sent || 0) + '・略過 ' + (d.skipped || 0) + '・失敗 ' + (d.failed || 0), d.failed ? 'warn' : 'ok');
+    Store.pushLog('notice', '發出收生通知書：' + (d.sent || 0) + ' 封');
+    await Sync.refresh('silent');
+    UI.rerenderPage();
+  } else {
+    toast('❌ 通知書寄出失敗：' + ((res && res.error) || '未知錯誤'), 'err');
+  }
+}
+
 async function intakeSetStatus(reg, status, opts) {
   opts = opts || {};
   if (_busyIds.has(reg.id)) { toast('處理中，等等…', 'warn'); return false; }
@@ -116,6 +138,12 @@ function intakeDetail(reg) {
         F('區會核對收款', reg.pcheck
           ? '✔ 已核對（' + (reg.pcBy || '—') + '・' + fmtDT(reg.pcAt) + '）'
           : '⚠️ 未核對——由區管理系統核對區帳戶後 tick'),
+        F('區會退款紀錄', reg.refunded
+          ? '↩ 已退款（' + (reg.refundBy || '—') + '）'
+          : (reg.status === 'rejected' || reg.status === 'cancelled' ? '⏳ 未見退款 tick' : '—')),
+        F('通知書', reg.noticeSent
+          ? '✉ 已寄出（' + (reg.noticeKind || '—') + '・' + fmtDT(reg.noticeAt) + '）'
+          : (reg.status === 'approved' || reg.status === 'rejected' ? '⏳ 已決定，未寄通知書' : '—')),
         F('STA 表格正本', reg.sta
           ? '✔ 已交回（' + (reg.staNote || '—') + '）'
           : (reg.status === 'approved' ? '❌ 未交回（上課時收）' : '— 上課時收'))),
@@ -162,7 +190,8 @@ regPage('intake', function (root) {
 
   root.appendChild(h('div', { class: 'page-head no-print' },
     h('div', { class: 'card-title' }, '✅ 收生確認'),
-    h('div', { class: 'row-sub' }, '接納後學員編號會按報名次序自動編配；各張 Print 名單自動更新'),
+    h('div', { class: 'row-sub' }, '接納後學員編號會按報名次序自動編配；各張 Print 名單自動更新；收生通知由本訓練班系統寄出，區管理系統不接觸參加者。'),
+    h('div', { class: 'btn-row' }, h('button', { class: 'btn btn-sm btn-primary', onclick: () => sendRegNotices([]) }, '✉ 發出接納及不接納通知書')),
     chips, searchIn));
 
   /* 批量 bar */
@@ -170,6 +199,7 @@ regPage('intake', function (root) {
     root.appendChild(h('div', { class: 'batch-bar no-print' },
       h('span', null, '已揀 ' + _intakeSel.size + ' 人'),
       h('button', { class: 'btn btn-primary btn-sm', onclick: () => intakeBatchApprove() }, '✔ 批量接納'),
+      h('button', { class: 'btn btn-sm', onclick: () => sendRegNotices(Array.from(_intakeSel)) }, '✉ 寄通知書'),
       h('button', { class: 'btn btn-sm btn-ghost', onclick: () => { _intakeSel.clear(); UI.rerenderPage(); } }, '清除')));
   }
 
@@ -214,6 +244,9 @@ regPage('intake', function (root) {
         reg.group ? h('span', { class: 'tag' }, esc(reg.group)) : null,
         reg.pcheck ? h('span', { class: 'tag tag-green', title: '區會已核對收款' + (reg.pcBy ? '（' + reg.pcBy + '）' : '') }, '💰✔')
           : (reg.status === 'pending' || reg.status === 'approved' ? h('span', { class: 'tag tag-amber', title: '區會未核對收款' }, '💰？') : null),
+        reg.refunded ? h('span', { class: 'tag tag-blue', title: '區會已退款' + (reg.refundBy ? '（' + reg.refundBy + '）' : '') }, '↩ 已退款') : null,
+        reg.noticeSent ? h('span', { class: 'tag tag-green', title: '通知書已寄出' + (reg.noticeAt ? '（' + fmtDT(reg.noticeAt) + '）' : '') }, '✉ 已寄')
+          : (reg.status === 'approved' || reg.status === 'rejected' ? h('span', { class: 'tag tag-amber', title: '已決定但未寄通知書' }, '✉ 未寄') : null),
         reg.sta ? h('span', { class: 'tag tag-green', title: '已交回 STA 表格正本' }, '📄✔')
           : (reg.status === 'approved' ? h('span', { class: 'tag tag-amber', title: '未交回 STA 表格正本（上課時收）' }, '📄') : null)),
       h('div', { class: 'reg-sub' },

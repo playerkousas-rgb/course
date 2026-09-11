@@ -14,23 +14,31 @@
 | 防爆 | 同一課程錯 5 次 → 鎖 10 分鐘（CacheService） |
 | 版本識別 | `auth` 回應帶 `v:'5.0.0'`；前端亦可偵測「有冇 auth action」分辨新舊後端 |
 | `setPaymentCheck` action | 區管理系統核對區帳戶後 tick「表格回應」AS-AU（已核對收款/核對人/核對時間）；identity 定位、唔 bump rev、首次自動補表頭 |
+| `setCourseRefund` action | 區管理系統財務退款 tick，寫 AX/AY（已退款/退款核對人）；班職員 App 只讀顯示 |
+| `sendRegNotice` action | CL 喺訓練班 App 寄接納／不接納通知書；ReplyTo=訓練班電郵；寫 AZ/BA 防重寄；區系統不接觸參加者 |
+| Budget 版本 action | `submitBudgetVersion` / `listBudgetVersions` / `approveBudgetVersion`；V1 開班前批，V2+ 收生後因人數變更再批；批完自動寫回 Input01 更新收支表 |
 | STA 收表 | AV/AW 兩欄（已交表格正本✔/收表記錄）——班職員 APP 收表時經 `saveCourseBatch` 寫，唔使另外加 action |
 | `getCourseSummary` action | **區管理系統批核用**：一個 call 攞齊最重要嘅資料（課程資料・節次・職員・預算 8 大類・通告要點・訓練班電郵・批准狀態・報名數）——管理層只睇呢個就批到，減省行政時間（`Summary.gs`） |
 | 參數分頁新格 | 「訓練班電郵」（管理層告知 CL 先填；通告查詢行自動用佢）——CourseFactory 起新班已自動預留 |
 
-## 安裝步驟（每班 GAS 專案，或改完模版之後全區生效）
+## 技術預備（只做一次；之後日常同事只 SET Sheet）
 
-1. **加檔案**：GAS 專案左欄「＋」→ 新增 `Auth.gs`・`PaymentCheck.gs` **同 `Summary.gs`** → 貼入本 repo `apps-script/` 對應檔全文
-2. **加路由**：喺 `Code.gs.course.js` 嘅 `doPost` 分發處（**驗完 apiKey 之後**，同其他 case 一齊）加：
+1. **技術同事先將模版做好**：只喺「開班文件模版 GS」嘅 bound Apps Script 加齊 `Auth.gs`・`PaymentCheck.gs`・`Summary.gs`・`Refund.gs`・`RegNotice.gs`・`BudgetVersions.gs`；日後 copy 出嚟嘅每班 GS 自動有齊，前線唔再逐班加檔。
+2. **技術同事喺模版加路由**：喺 `Code.gs.course.js` 嘅 `doPost` 分發處（**驗完 apiKey 之後**，同其他 case 一齊）加：
    ```js
    case 'auth':            return doAuth_(msg);
    case 'setPassword':     return doSetPassword_(msg);
    case 'setPaymentCheck': return doSetPaymentCheck_(msg);
    case 'getCourseSummary': return doGetCourseSummary_(msg);
+   case 'setCourseRefund': return doSetCourseRefund_(msg);
+   case 'sendRegNotice': return doSendRegNotice_(msg);
+   case 'submitBudgetVersion': return doSubmitBudgetVersion_(msg);
+   case 'listBudgetVersions': return doListBudgetVersions_(msg);
+   case 'approveBudgetVersion': return doApproveBudgetVersion_(msg);
    ```
    （如果 doPost 係 if/else 寫法，就照原有格式加同等兩句）
-3. **部署**：部署 → 管理部署 → ✏️ 編輯 → 建立新版本
-4. **欄位上限檢查**：`setCourseCells`／`saveCourseBatch` 嘅座標驗證如果限制欄號上限（例如 26/30），改做 **60**（新欄去到 AW=49）
+3. **部署模版 Script 一次**：部署 → 管理部署 → ✏️ 編輯 → 建立新版本；之後前線開班只 copy 模版，唔再入 Apps Script。
+4. **欄位上限檢查**：`setCourseCells`／`saveCourseBatch` 嘅座標驗證如果限制欄號上限（例如 26/30），改做 **60**（新欄去到 BA=53）
 5. `getCourseSheetRaw_` 嘅 dump 清單加一行（簽到/點名頁要讀）：
    ```js
    attend: dump('Print_學員出席紀錄'),
@@ -51,7 +59,7 @@ gs/
     VERSION.txt          → 5.0.0（coursev5）
 ```
 
-區管理系統開新班時改用 `coursev5/` 模版；舊班想升級就照「安裝步驟」逐班加（约 2 分鐘）。
+區管理系統／訓練班開新班時只用已預備好嘅 `coursev5` 模版；舊班想升級先需要技術同事按上面步驟補一次。
 三邊適配點：
 - **訓練班管理系統（本 repo）**：已支援——`auth` 通 → v5 流程（首次登入提示改密碼）；冇 `auth` → 自動退回舊版本機閘（完全向下相容）
 - **區管理系統／成員系統**：唔需要即刻改（所有舊 action 原封不動）；想 feature-detect 就試 call `auth`
@@ -88,13 +96,25 @@ function ensureApiKey() {
 
 流程：CourseFactory 起新班時將 apiKey 寫 `_Sync!A5` → 課程 Script 第一次收到請求就 adopt（hash 入 Properties、清 A5）→ 之後同一般班完全一樣。CL 唔使接觸任何 key 設定。
 
-### 部署清單（區管理層，一次）
+### 日常部署清單（只 SET 一張 Sheet）
 
-1. 開新 Apps Script 專案 → 貼 `CourseFactory.gs` → 填 Script Properties（`FACTORY_KEY_HASH`／`TEMPLATE_FILE_ID`／`FOLDER_ID`／`COURSE_API_EXEC`）
-2. 模版 GS 嘅 bound script 加 `ensureApiKey()`（上面嗰段）
-3. 部署 CourseFactory 做網頁應用程式（任何人）→ `/exec` 網址＋開班碼發俾 CL
-4. CL 開 APP → 🆕 新開班 → 🏛 連區會起表（即刻開真 GS）→ 複製 GS URL 交區管理系統 → 喺 APP 填晒所有嘢
-5. 區管理系統批核淨係 call `getCourseSummary`（一個 call 攞齊課程資料・預算 8 大類・通告檔案編號・訓練班電郵・批准狀態・報名數——合約 `docs/API.md`）；批好 tick「區會批准」格，CL 見 ✔ 先出通告；收款核對用 `setPaymentCheck`
+區管理層唔需要再入 Apps Script / Script Properties。只做：
+
+1. 開一張 **CourseFactory控制台** Google Sheet，分頁叫「設定」。
+2. A欄/B欄填以下幾行：
+
+   | A欄 label | B欄 value |
+   |---|---|
+   | 模版GS檔案ID | 開班文件模版 GS file id |
+   | 開班文件資料夾ID | 新班 GS 存放 folder id |
+   | 課程API網址 | 模版課程 Script 部署出嚟嘅 `/exec` |
+   | 成員系統報名網址 | 成員系統報名頁 base URL；可留空 |
+   | 區管理電郵 | 如要自動分享 GS 俾區管理帳戶先填；可留空 |
+   | 開班碼 | 可留空；留空即 CL 新開空白班不需開班碼 |
+
+3. 擴充功能 → Apps Script → 貼 `CourseFactory.gs` → 部署為網頁應用程式（任何人）。
+4. 將 CourseFactory `/exec` 放入前端。之後日常只改「設定」Sheet；開錯班用隱藏後台刪。
+5. CL 開 APP → 🆕 新開班 → 即刻開真 GS → 喺 APP 填晒預算／節次／通告。區管理系統負責批核、掛載、收款、退款、Budget 批核。
 
 ### 多班共用 API（可選）
 

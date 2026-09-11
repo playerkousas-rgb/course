@@ -68,7 +68,7 @@ regPage('roster', function (root) {
     const left = items.slice(0, half), right = items.slice(half);
     const leader = (st.info && st.info.leader) || null;
     const notice = '請獲接納之學員按接納通知書上指示，準時到訓練班場地報到。如名單上沒有閣下之姓名，表示該申請未獲接納，本區會即時辦理退款並銷毀個人資料。如有任何疑問，請電郵至 ' +
-      ((leader && leader.email) || '（班領導人電郵）') + ' 或致電 ' + ((leader && leader.phone) || '（電話）') + ' 與本人聯絡。';
+      ((st.params && st.params.courseEmail) || (leader && leader.email) || '（訓練班電郵）') + ' 或致電 ' + ((leader && leader.phone) || '（電話）') + ' 與本人聯絡。';
     const plain = (st.info.name || '') + '　取錄名單\n' +
       items.map(i => i.no + '．' + i.name + '（' + i.troop + '）').join('\n');
     const rows = [];
@@ -207,11 +207,12 @@ regPage('roster', function (root) {
     h('div', { class: 'btn-row' },
       h('button', { class: 'btn btn-sm', onclick: autoGroup }, '🔀 自動分組'),
       h('button', { class: 'btn btn-sm', onclick: exportCSV }, '⬇ 匯出 CSV'),
+      h('button', { class: 'btn btn-sm btn-primary', onclick: () => sendRegNotices([]) }, '✉ 發出接納及不接納通知書'),
       h('button', { class: 'btn btn-sm', onclick: () => window.print() }, '🖨️ 列印名單'))));
 
   const table = h('table', { class: 'data-table print-doc' },
     h('thead', null, h('tr', null,
-      ['編號', '姓名', '性別', '旅團', '旅號', '聯絡電話', '家長電話', '電郵', '分組'].map(t => h('th', null, t)))),
+      ['編號', '姓名', '性別', '旅團', '旅號', '聯絡電話', '家長電話', '電郵', '狀態', '分組'].map(t => h('th', null, t)))),
     h('tbody', null, approved.map(r => {
       const groupSel = h('select', { class: 'input s' }, h('option', { value: '' }, '—'));
       GROUP_OPTIONS.forEach(g => groupSel.appendChild(h('option', { value: g }, g)));
@@ -229,6 +230,11 @@ regPage('roster', function (root) {
         h('td', null, esc(r['聯絡電話'] || '—')),
         h('td', null, esc(r['家長/監護人聯絡電話'] || '—')),
         h('td', { class: 'td-small' }, esc(r['電郵地址'] || '—')),
+        h('td', null,
+          h('div', { class: 'chip-row' },
+            r.pcheck ? h('span', { class: 'tag tag-green', title: '區會已核對收款' + (r.pcBy ? '（' + r.pcBy + '）' : '') }, '💰✔') : h('span', { class: 'tag tag-amber', title: '區會未核對收款' }, '💰？'),
+            r.refunded ? h('span', { class: 'tag tag-blue', title: '區會已退款' + (r.refundBy ? '（' + r.refundBy + '）' : '') }, '↩') : null,
+            r.noticeSent ? h('span', { class: 'tag tag-green', title: '通知書已寄出' + (r.noticeAt ? '（' + fmtDT(r.noticeAt) + '）' : '') }, '✉') : h('span', { class: 'tag tag-amber', title: '未寄通知書' }, '✉？'))),
         h('td', null, groupSel));
     })));
   root.appendChild(h('div', { class: 'card' }, h('div', { class: 'table-scroll' }, table)));

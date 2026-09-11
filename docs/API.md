@@ -15,11 +15,16 @@
 |---|---|---|---|
 | `auth` | `password` | `{role:'staff'\|'admin',firstLogin:bool,v:'5.0.0'}` | 解鎖驗證（coursev5+）。錯 5 次 → 後端鎖 10 分鐘 |
 | `setPassword` | `oldPassword,newPassword` | `{saved}` | 改共職員密碼（全體生效；新密碼 ≥4 位、≠1234、唔可以有 `:`） |
-| `setPaymentCheck` | `id`(=時間戳記),`verified`,`by` | `{saved,row,verified}` | **區管理系統用**：核對區帳戶後 tick「已核對收款」；identity 定位、唔 bump rev、自動補表頭 |
+| `setPaymentCheck` | `id`(=時間戳記),`verified`,`by` | `{saved,row,verified}` | **區管理系統財務用**：核對區帳戶後 tick「已核對收款」；identity 定位、唔 bump rev、自動補表頭 |
+| `setCourseRefund` | `id`(=時間戳記),`refunded`,`by` | `{saved,row,refunded}` | **區管理系統財務用**：已退款 tick，寫 AX/AY；CL App 只讀顯示 |
+| `sendRegNotice` | `ids?`,`by?` | `{sent,skipped,failed,results}` | **訓練班系統用**：CL 發接納／不接納通知書；ReplyTo=訓練班電郵；寫 AZ/BA 防重寄 |
+| `submitBudgetVersion` | `reason`,`by` | `{version,status,snapshot}` | **訓練班系統用**：提交 Budget V1/V2 給管理層批核 |
+| `listBudgetVersions` | — | `{versions,currentApproved}` | 查閱 Budget 版本紀錄 |
+| `approveBudgetVersion` | `version`,`by` | `{approved,version,appliedToInput01}` | **區管理系統批核用**：批准 Budget 版本並寫回 Input01，令 Print_財政預算／收支表自動更新 |
 | `getCourseSheetRaw` | — | `{input01,input02,input03,input04,resp,paramsWX,notice,attend,accept,finance,completion,cert,subsidy,pulledAt,rev,revSavedAt,revBy}` | 主同步（15 秒輪詢）；rev 供樂觀鎖；`attend`（Print_學員出席紀錄）係 coursev5 加嘅 dump |
 | `getCourseProfile` | — | 課程結構資料 | 連線測試＋解鎖頁職員名單 |
 | `getCourseSummary` | — | 見下「getCourseSummary 精簡批核 view」 | **區管理系統批核用**（`apps-script/Summary.gs`）：管理層只睇最重要嘅資料——一個 call 攞齊課程資料・節次・職員・預算 8 大類・通告要點（檔案編號/訓練班電郵）・批准狀態・報名數，減省行政時間。純讀、唔 bump rev |
-| `createCourse` | `masterKey`(開班碼),`courseName`,`edition?,section?,badge?,intake?,fee?,clName?` | `{exec,apiKey,courseId,courseName,firstLogin,url}` | **區級 CourseFactory**（`apps-script/CourseFactory.gs` 獨立部署）:CL 新開班**即刻起真 GS**（區管理系統 SCRIPT 要 URL 先連結批核）——copy 模版＋預填＋產 apiKey＋回傳 GS `url` 交區;APP 即刻連線 |
+| `createCourse` | `masterKey`(開班碼),`courseName`,`edition?,section?,badge?,intake?,fee?,clName?` | `{exec,apiKey,courseId,publicCourseId,directRegUrl,courseName,firstLogin,url}` | **區級 CourseFactory**（`apps-script/CourseFactory.gs` 獨立部署）:CL 新開班**即刻起真 GS**（區管理系統 SCRIPT 要 URL 先連結批核）——copy 模版＋預填＋產 apiKey＋回傳 GS `url` 交區;APP 即刻連線 |
 | `setRegStatus` | `id`(=時間戳記),`status`(pending/approved/rejected/cancelled),`reviewer` | `{saved,id,status}` | 收生：接納/拒絕/取消。**唔檢查 rev、唔 bump rev**（identity 定位，安全） |
 | `saveCourseBatch` | `cells[{tab,row,col,value}]`,`baseRev`,`by` | `{saved,rev,savedAt,updated,skippedTabs}` | 批次寫格（開班文件／通告／分組） |
 | `addExpenseRow` | `amounts{B..J}`,`note` | `{added,row,receiptNo}` | 〔二階段〕支出 append-only，唔撞 rev |
@@ -48,6 +53,18 @@
 1. **通告檔案編號**（`notice.fileNo`）——管理層出編號話 CL 知，CL 填入通告頁「檔案編號」格
 2. **訓練班電郵**（`courseEmail`）——管理層告知 CL，CL 填入參數分頁格；通告查詢行會自動用佢（冇填先 fallback 班領導人電郵）
 3. 批好就 tick「區會批准」格（直接開 GS，或 `saveCourseBatch` 寫參數分頁）——CL 喺 APP 見到 ✔ 先出通告
+
+
+## 通告 direct 報名連結
+
+通告上只印**成員系統報名入口**，參加者不會見到訓練班 Script `/exec`。用來「對準報名表」的不是人手輸入欄，而是 `publicCourseId`：CourseFactory 開班時自動產生並寫入訓練班 GS「參數」及 CourseFactory「訓練班登記」。區管理系統只需人手輸入訓練班 `Script URL`、`通告編號`、`網頁通告 URL`；系統讀取／保存同一個 `publicCourseId` 到 CourseLinks，掛載到成員系統時用它作內部對應。成員系統不用人手設定；舊班如沒有 `publicCourseId`，區管理系統可自動生成一個並回寫。
+
+## Budget 版本批核
+
+- V1：CL 開班填完初版 Budget 後提交；管理層可批。
+- V2+：正常係收生後因實際人數太多／太少而修訂。
+- `approveBudgetVersion` 批准後會把該版本 snapshot 寫回 `Input01`，所以 `Print_財政預算`、收支表、完成報告使用的基準會自動變成最新已批 Budget，避免班職員照舊數用錯錢。
+- `_BudgetVersions` 只係同一張 Spreadsheet 入面嘅隱藏版本紀錄，不會拆散成多張 Sheet 檔案。
 
 ## 密碼流程（coursev5）
 - 每班第一次登入 `1234`（GS 冇 `COURSE_PW_HASH` → `auth` 回 `firstLogin:true`）→ 前端即刻彈「請設定新密碼」
@@ -81,14 +98,14 @@ B18 截止／B19 公佈；職員 23–42（A職位B姓名C稱謂D單位E資格F�
 可編：G12 檔案編號／G13 發出日期／C23 參加資格／C24 費用說明／C31 服裝／C32–37 備註／E43 區總監署名／E45 代行
 其餘 C22/C25/C28/C29/C30/C39、A15、B18:D21 全係公式（前端自行等效組版做 live preview）
 
-### 表格回應（coursev5 起 49 欄）
+### 表格回應（coursev5 起 53 欄）
 公式欄（**只讀**）：AD 旅號（旅團抽數字）、AI 學員編號（✔ 行 COUNTIF，報名次序）
 參數分頁（`參數`）「**區會批准**」格（**區管理層批核訓練班時寫，CL 喺 APP 只讀**）：
 - 批改完先 tick ✔；CL 見到 ✔ 就生成通告交區網頁管理員（tick 之前唔可以交）
 - 通告上網＋掛載係**區管理系統內部**嘢（佢自己 SHEET 分頁貼訓練班 SCRIPT URL・訓練班 Drive・通告 URL→自動掛載成員系統），同訓練班 GS 無關；APP 用「報名流入 RESP」做已掛載信號
 
 職員欄：AJ 分組（第一至八組）、AK 審批狀態、AL 批核人、AM 批核時間（AK/AL/AM+AC 由 setRegStatus 寫）
-coursev5 新欄：AS 已核對收款✔／AT 核對人／AU 核對時間（區管理系統 setPaymentCheck 寫）；AV 已交表格正本（STA）✔／AW 收表記錄（班職員收表時 saveCourseBatch 寫）
+coursev5 新欄：AS 已核對收款✔／AT 核對人／AU 核對時間（區管理系統 setPaymentCheck 寫）；AV 已交表格正本（STA）✔／AW 收表記錄（班職員收表時 saveCourseBatch 寫）；AX 已退款✔／AY 退款核對人（區管理系統 setCourseRefund 寫）；AZ 通知書／BA 通知書寄出時間（訓練班系統 sendRegNotice 寫）
 公式欄（**只讀**）：AD 旅號（旅團抽數字）、AI 學員編號（✔ 行 COUNTIF，報名次序）
 職員欄：AJ 分組（第一至八組）、AK 審批狀態、AL 批核人、AM 批核時間（AK/AL/AM+AC 由 setRegStatus 寫）
 

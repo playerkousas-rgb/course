@@ -42,10 +42,10 @@ regPage('notice', function (root) {
   /* ── 編輯面板 ── */
   const editCard = h('div', { class: 'card no-print' },
     h('div', { class: 'card-title' }, '✏️ 通告可編欄位'),
-    h('div', { class: 'row-sub' }, '檔案編號＋訓練班電郵要向管理層攞（佢哋話你知先填）；其餘（標題・節次・名額・截止・FPS）全部由「開班文件」自動帶入'),
+    h('div', { class: 'row-sub' }, '前線喺訓練班系統唔需要填成員系統報名表對應資料；報名表對準由區管理系統掛載時用「公開課程ID」自動處理。呢度只保留通告文字本身要草擬嘅欄位。'),
     h('div', { class: 'grid-2c' },
       cellField(TAB.NOTICE, NOTICE_EDIT.fileNo),
-      paramField('訓練班電郵', '管理層告知先用；通告查詢行會自動用呢個電郵'),
+      paramField('訓練班電郵', '管理層告知先用；通告查詢行會自動用呢個班信箱'),
       cellField(TAB.NOTICE, NOTICE_EDIT.issueDate)),
     h('div', {}, cellField(TAB.NOTICE, NOTICE_EDIT.eligibility)),
     h('div', {}, cellField(TAB.NOTICE, NOTICE_EDIT.feeNote)),

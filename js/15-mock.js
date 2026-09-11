@@ -187,6 +187,8 @@ function mockSeedState() {
   const PARAM = [
     ['區會常數（唔好改名）', ''],
     ['成員系統報名網址', 'https://member-portal-sigma-swart.vercel.app/training'],
+      ['公開課程ID', 'demo-course'],
+      ['成員系統直接報名連結', 'https://member-portal-sigma-swart.vercel.app/training?courseId=demo-course'],
     ['FPS 識別碼', '102866183'],
     ['FPS 戶口名稱', 'SCOUT ASSOCIATION OF HONG KONG - SHAU KEI WAN DISTRICT'],
     ['區會網址', 'www.skwscout.org.hk'],
@@ -276,13 +278,15 @@ function mockBlankState(nm, b) {
   const PARAM = [
     ['區會常數（唔好改名）', ''],
     ['成員系統報名網址', 'https://member-portal-sigma-swart.vercel.app/training'],
+      ['公開課程ID', 'demo-course'],
+      ['成員系統直接報名連結', 'https://member-portal-sigma-swart.vercel.app/training?courseId=demo-course'],
     ['FPS 識別碼', '102866183'],
     ['FPS 戶口名稱', 'SCOUT ASSOCIATION OF HONG KONG - SHAU KEI WAN DISTRICT'],
     ['區會網址', 'www.skwscout.org.hk'],
     ['區會批准', ''],
     ['訓練班電郵', ''],
   ];
-  const st = { rev: 0, savedAt: '', by: '', sheets: {} };
+  const st = { rev: 0, savedAt: '', by: '', sheets: {}, budgetVersions: [] };
   st.sheets[TAB.IN1] = IN1; st.sheets[TAB.IN2] = IN2;
   st.sheets[TAB.PARAM] = PARAM;
   st.sheets[TAB.IN3] = IN3; st.sheets[TAB.IN4] = IN4;
@@ -321,6 +325,14 @@ function mockLoad() {
   mockPersist();
   return MOCK_STATE;
 }
+function mockMigrate(state) {
+  if (!state.sheets) state.sheets = {};
+  if (!Array.isArray(state.budgetVersions)) state.budgetVersions = [];
+  if (state.sheets[TAB.RESP] && state.sheets[TAB.RESP][0]) {
+    RESP_HEADERS.forEach((h, i) => { if (!state.sheets[TAB.RESP][0][i]) state.sheets[TAB.RESP][0][i] = h; });
+  }
+}
+
 function mockPersist() {
   try {
     if (MOCK_CUR.key && MOCK_CUR.state) {
@@ -370,6 +382,8 @@ function mockDump(state) {
       : [
           ['區會常數（唔好改名）', ''],
           ['成員系統報名網址', 'https://member-portal-sigma-swart.vercel.app/training'],
+      ['公開課程ID', 'demo-course'],
+      ['成員系統直接報名連結', 'https://member-portal-sigma-swart.vercel.app/training?courseId=demo-course'],
           ['FPS 識別碼', '102866183'],
           ['FPS 戶口名稱', 'SCOUT ASSOCIATION OF HONG KONG - SHAU KEI WAN DISTRICT'],
           ['區會網址', 'www.skwscout.org.hk'],
@@ -431,7 +445,52 @@ const MockAPI = {
       return mockOk({
         exec: 'mock', apiKey: key, courseId: key, courseName: nm, firstLogin: true,
         url: 'https://docs.google.com/spreadsheets/d/mock-' + Date.now().toString(36),
+        publicCourseId: key, directRegUrl: 'https://member-portal-sigma-swart.vercel.app/training?courseId=' + encodeURIComponent(key),
       });
+    }
+    if (action === 'adminListCourses') {
+      if (b.adminUser !== 'sheep' || b.adminPassword !== '0728') return mockErr('Unauthorized');
+      const reg = mockCourses();
+      const courses = Object.keys(reg).map(k => ({ apiKey: k, key: k, exec: 'mock', scriptExecUrl: 'mock', name: String(shCell(reg[k].sheets[TAB.IN2], 1, 2) || shCell(reg[k].sheets[TAB.IN1], 1, 2) || '未命名訓練班'), courseName: String(shCell(reg[k].sheets[TAB.IN2], 1, 2) || shCell(reg[k].sheets[TAB.IN1], 1, 2) || '未命名訓練班'), publicCourseId: k, courseId: k, status: 'active', createdAt: '' }));
+      courses.unshift({ apiKey: MOCK_API_KEY, key: MOCK_API_KEY, exec: 'mock', scriptExecUrl: 'mock', name: '演示訓練班（攝影專章）', courseName: '演示訓練班（攝影專章）', publicCourseId: 'demo-course', courseId: 'demo-course', status: 'active' });
+      return mockOk({ courses: courses });
+    }
+    if (action === 'adminDeleteCourse') {
+      if (b.adminUser !== 'sheep' || b.adminPassword !== '0728') return mockErr('Unauthorized');
+      const id = String(b.publicCourseId || b.courseId || b.apiKey || b.key || b.id || '').trim();
+      if (id === 'demo-course' || id === MOCK_API_KEY) { mockReset(); return mockOk({ deleted: true, name: '演示訓練班（攝影專章）', trashed: false }); }
+      const reg = mockCourses();
+      if (!reg[id]) return mockErr('找不到該訓練班');
+      const name = String(shCell(reg[id].sheets[TAB.IN2], 1, 2) || shCell(reg[id].sheets[TAB.IN1], 1, 2) || '未命名訓練班');
+      delete reg[id]; mockSaveCourses(reg);
+      return mockOk({ deleted: true, name: name, trashed: !!b.trashFile });
+    }
+    if (action === 'connectCourseByPassword') {
+      const id = String(b.publicCourseId || b.courseId || b.id || '').trim();
+      if (id === 'demo-course' || id === MOCK_API_KEY) {
+        return mockPwAuth(mockLoad(), b).ok ? mockOk({ apiKey: MOCK_API_KEY, key: MOCK_API_KEY, exec: 'mock', scriptExecUrl: 'mock', name: '演示訓練班（攝影專章）', courseName: '演示訓練班（攝影專章）', publicCourseId: 'demo-course', directRegUrl: 'https://member-portal-sigma-swart.vercel.app/training?courseId=demo-course' }) : mockPwAuth(mockLoad(), b);
+      }
+      const reg = mockCourses();
+      const st0 = reg[id] || null;
+      if (!st0) return mockErr('找不到該訓練班');
+      const a0 = mockPwAuth(st0, b);
+      if (!a0.ok) return a0;
+      return mockOk({ apiKey: id, key: id, exec: 'mock', scriptExecUrl: 'mock', name: String(shCell(st0.sheets[TAB.IN2], 1, 2) || shCell(st0.sheets[TAB.IN1], 1, 2) || '未命名訓練班'), courseName: String(shCell(st0.sheets[TAB.IN2], 1, 2) || shCell(st0.sheets[TAB.IN1], 1, 2) || '未命名訓練班'), publicCourseId: id, directRegUrl: 'https://member-portal-sigma-swart.vercel.app/training?courseId=' + encodeURIComponent(id) });
+    }
+    if (action === 'listCourses') {
+      const reg = mockCourses();
+      const courses = Object.keys(reg).map(k => ({
+        apiKey: k, key: k,
+        exec: 'mock', scriptExecUrl: 'mock',
+        name: String(shCell(reg[k].sheets[TAB.IN2], 1, 2) || shCell(reg[k].sheets[TAB.IN1], 1, 2) || '未命名訓練班'),
+        courseName: String(shCell(reg[k].sheets[TAB.IN2], 1, 2) || shCell(reg[k].sheets[TAB.IN1], 1, 2) || '未命名訓練班'),
+        gsUrl: 'https://docs.google.com/spreadsheets/d/mock-' + k,
+        publicCourseId: k,
+        directRegUrl: 'https://member-portal-sigma-swart.vercel.app/training?courseId=' + encodeURIComponent(k),
+        status: 'active'
+      }));
+      courses.unshift({ apiKey: MOCK_API_KEY, key: MOCK_API_KEY, exec: 'mock', scriptExecUrl: 'mock', name: '演示訓練班（攝影專章）', courseName: '演示訓練班（攝影專章）', publicCourseId: 'demo-course', directRegUrl: 'https://member-portal-sigma-swart.vercel.app/training?courseId=demo-course', status: 'active' });
+      return mockOk({ courses: courses });
     }
     if (action === 'getCourseProfile') {
       /* 連線測試用：唔驗 key 都回基本料（方便手快貼錯都知） */
@@ -453,6 +512,10 @@ const MockAPI = {
     if (action === 'auth') return mockPwAuth(state, b);
     if (action === 'setPassword') return mockPwSet(state, b);
     if (action === 'setPaymentCheck') return mockPaymentCheck(state, b);
+    if (action === 'sendRegNotice') return mockRegNotice(state, b);
+    if (action === 'submitBudgetVersion') return mockSubmitBudgetVersion(state, b);
+    if (action === 'listBudgetVersions') return mockListBudgetVersions(state, b);
+    if (action === 'approveBudgetVersion') return mockApproveBudgetVersion(state, b);
     if (action === 'setCompletionRow') return mockSetCompletionRow(state, b);
     if (action === 'setCertRow') return mockSetCertRow(state, b);
     if (action === 'getCourseSheetRaw') {
@@ -692,6 +755,69 @@ function mockPaymentCheck(state, b) {
   resp[idx][RC['核對時間'] - 1] = ok ? new Date().toISOString() : '';
   mockPersist();
   return mockOk({ saved: true, id: b.id, verified: ok });
+}
+
+/* sendRegNotice（訓練班系統寄接納／不接納通知書；演示只寫 AZ/BA 紀錄） */
+function mockRegNotice(state, b) {
+  const resp = state.sheets[TAB.RESP];
+  const ids = Array.isArray(b.ids) ? b.ids.map(x => String(x).trim()).filter(Boolean) : [];
+  let sent = 0, skipped = 0, failed = 0;
+  for (let i = 1; i < resp.length; i++) {
+    const id = String(resp[i][RC_ID - 1] || '').trim();
+    if (!id || (ids.length && ids.indexOf(id) < 0)) continue;
+    const status = String(resp[i][RC_STATUS - 1] || '').trim().toLowerCase() || (resp[i][RC_ACCEPT - 1] === '✔' ? 'approved' : (resp[i][RC_ACCEPT - 1] === '✗' ? 'rejected' : 'pending'));
+    if (status !== 'approved' && status !== 'rejected') { skipped++; continue; }
+    if (String(resp[i][RC_REG_NOTICE - 1] || '').trim()) { skipped++; continue; }
+    resp[i][RC_REG_NOTICE - 1] = status === 'approved' ? 'accepted' : 'rejected';
+    resp[i][RC['通知書寄出時間'] - 1] = new Date().toISOString();
+    sent++;
+  }
+  mockPersist();
+  return mockOk({ sent: sent, skipped: skipped, failed: failed });
+}
+
+/* Budget V1/V2 版本（演示）：submit → pending；approve → 寫回 Input01，令收支表跟最新已批版 */
+function mockBudgetSnapshot(state, version, reason) {
+  return {
+    version: version,
+    reason: String(reason || ''),
+    capturedAt: new Date().toISOString(),
+    range: 'A1:J110',
+    values: (state.sheets[TAB.IN1] || []).slice(0, 110).map(r => r.slice(0, 10)),
+  };
+}
+function mockSubmitBudgetVersion(state, b) {
+  if (!Array.isArray(state.budgetVersions)) state.budgetVersions = [];
+  const version = state.budgetVersions.reduce((m, r) => Math.max(m, Number(r.version) || 0), 0) + 1;
+  const snap = mockBudgetSnapshot(state, version, b.reason || '');
+  state.budgetVersions.push({ version: version, status: 'pending', createdAt: new Date().toISOString(), submittedAt: new Date().toISOString(), submittedBy: b.by || '', approvedAt: '', approvedBy: '', reason: b.reason || '', snapshot: snap });
+  mockPersist();
+  return mockOk({ version: version, status: 'pending', snapshot: snap });
+}
+function mockListBudgetVersions(state) {
+  if (!Array.isArray(state.budgetVersions)) state.budgetVersions = [];
+  const approved = state.budgetVersions.filter(v => v.status === 'approved').sort((a, b) => b.version - a.version)[0] || null;
+  return mockOk({ versions: state.budgetVersions, currentApproved: approved });
+}
+function mockApproveBudgetVersion(state, b) {
+  if (!Array.isArray(state.budgetVersions)) state.budgetVersions = [];
+  const version = Number(b.version);
+  const v = state.budgetVersions.filter(x => Number(x.version) === version)[0];
+  if (!v || !v.snapshot || !v.snapshot.values) return mockErr('找不到 Budget V' + version);
+  state.budgetVersions.forEach(x => { if (x.status === 'approved') x.status = 'superseded'; });
+  v.status = 'approved'; v.approvedAt = new Date().toISOString(); v.approvedBy = b.by || '';
+  state.sheets[TAB.IN1] = v.snapshot.values.map(r => r.slice());
+  const p = state.sheets[TAB.PARAM] || (state.sheets[TAB.PARAM] = []);
+  function setParam(label, value) {
+    let row = p.filter(r => String(r[0] || '') === label)[0];
+    if (!row) { row = [label, '']; p.push(row); }
+    row[1] = value;
+  }
+  setParam('目前批准Budget版本', 'V' + version);
+  setParam('Budget批准人', b.by || '');
+  setParam('Budget批准時間', v.approvedAt);
+  mockPersist();
+  return mockOk({ approved: true, version: version, appliedToInput01: true });
 }
 
 /* saveCourseBatch 核心（setCourseCells 同一條路） */
