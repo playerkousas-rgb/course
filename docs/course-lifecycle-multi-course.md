@@ -2,14 +2,15 @@
 
 ## 核心概念
 
-訓練班管理系統是一個**共用前端**，但不是「沒有後端」。正確理解是：**沒有一個中央 course server；每班自己的 Apps Script Web App 就是該班後端**。同一個前端網址可以同時服務 A、B、C 多個訓練班；真正分開的是每班自己的：
+訓練班管理系統是一個**共用前端**，但不是「沒有後端」。新制（v6.0.0+）的正確理解是：**後端＝一張「訓練班系統 GS」原點＋一個共用 `/exec`（CourseHub）**；每班自己的 Google Sheet 由原點自動產生和登記，所有讀寫經同一個 `/exec` 按該班 API Key 自動對應。同一個前端網址可以同時服務 A、B、C 多個訓練班；真正分開的是每班自己的：
 
-- 一張 Google Sheet 工作簿
-- 一個 Apps Script `/exec`（該班後端）
-- 一個 API Key
-- 一個共職員密碼
+- 一張 Google Sheet 工作簿（原點自動產生＋登記）
+- 一個 API Key（登記表只存 hash）
+- 一個共職員密碼（存原點隱藏 `_Auth` 分頁，按班獨立）
 
-所以資料不會混在一起。前端只是一個入口，入哪一班由 `/exec + API Key` 決定；同一班職員用同一組 `/exec + API Key + 班密碼`，就會看到同一張 Sheet 的同一份資料。
+（舊制＝每班自己的 Apps Script `/exec` 做該班後端，仍然相容。）
+
+所以資料不會混在一起。前端只是一個入口，入哪一班由 `API Key`（經登記表對應）決定；同一班職員用同一組連線資料＋班密碼，就會看到同一張 Sheet 的同一份資料。
 
 ---
 
@@ -18,12 +19,12 @@
 
 CL／班職員不需要記 `courseId`。`courseId` 是系統用的隱藏 ID；人只需要認得班名。
 
-訓練班登記表／CourseFactory registry 應保存：
+訓練班登記表（原點 GS「訓練班登記」分頁；舊制 CourseFactory registry）保存：
 
-| 顯示班名 | courseId / publicCourseId | Script `/exec` | GS URL | 狀態 |
-|---|---|---|---|---|
-| A 班 | crs_xxx | A 班或共用 API `/exec` | A Sheet | 進行中 |
-| B 班 | crs_yyy | B 班或共用 API `/exec` | B Sheet | 進行中 |
+| 顯示班名 | 內部課程ID / publicCourseId | API Key | Script `/exec` | GS URL | 狀態 |
+|---|---|---|---|---|---|
+| A 班 | crs_xxx / crs_pub_xxx | 只存 hash | 新制＝共用 hub `/exec`；舊班＝該班自己 | A Sheet | 進行中 |
+| B 班 | crs_yyy / crs_pub_yyy | 只存 hash | 同上 | B Sheet | 進行中 |
 
 前端流程是：
 
@@ -38,7 +39,7 @@ CL／班職員不需要記 `courseId`。`courseId` 是系統用的隱藏 ID；�
   ↓
 輸入本班共用密碼
   ↓
-CourseFactory 驗證密碼
+訓練班系統後端驗證密碼（新制＝hub 內部驗證；舊班＝proxy 去該班 /exec）
   ↓
 系統自動取回該班 courseId + scriptExecUrl + key
   ↓
@@ -76,14 +77,14 @@ B 班：exec_B + key_B → B Sheet
 
 1. 區給 CL：
    - 訓練班系統網址
-   - CourseFactory `/exec`
-   - 管理碼/開班碼
-2. CL 在訓練班系統按「🆕 新開班」。
-3. CourseFactory 即時建立該班自己的 GS，回傳：
+   - 訓練班系統 `/exec`（原點 GS 單一後端）
+   - 開班碼（可選；原點「設定」有設定才需要）
+2. CL 在訓練班系統按「🆕 新開班」，只填課程資料（名稱／班領導人／名額／收費／屆別／支部／專章）。
+3. 訓練班系統後端即時自動產生該班自己的 GS＋登記，回傳：
    - GS URL
-   - Script `/exec`
+   - `/exec`（新制＝同一條 hub /exec）
    - API Key
-   - hidden `publicCourseId`
+   - hidden 內部課程ID + `publicCourseId`
    - 成員系統 direct 報名連結
 4. CL 進入該班，首次密碼 `1234`，然後改成班內共用密碼。
 5. CL 在 App 填開班文件、Budget V1、節次、通告。
@@ -195,44 +196,45 @@ https://course-app.../?exec=...&key=...&name=...
 
 ## 開班是否需要管理碼？
 
-可以不需要。CourseFactory 可以設定成 `FACTORY_KEY_HASH` 留空，任何知道 CourseFactory `/exec` 的人都可以開一張空白訓練班 Sheet。這張表未經區管理系統批核／掛載，就不會出現在成員系統，實際上無法公開收生。
+可以不需要。原點「設定」嘅開班碼留空，任何知道訓練班系統 `/exec` 的人都可以開一張空白訓練班 Sheet。這張表未經區管理系統批核／掛載，就不會出現在成員系統，實際上無法公開收生。
 
-但要注意：**公開開班**同**公開取回既有班的 API Key**是兩回事。開空白表可以放寬；已存在班的 API Key 不能公開，否則別人可能讀到報名資料。因此「從登記表選班」只公開班名；職員選班後要輸入本班密碼，CourseFactory 驗證成功才回傳 `/exec + API Key`。
+但要注意：**公開開班**同**公開取回既有班的 API Key**是兩回事。開空白表可以放寬；已存在班的 API Key 不能公開，否則別人可能讀到報名資料。因此「從登記表選班」只公開班名；職員選班後要輸入本班密碼，後端驗證成功才回傳 `/exec + API Key`（登記表本身只存 API Key hash）。
 
 
 
-## 最簡營運設定：只 SET 一張 Sheet
+## 最簡營運設定：一張原點 GS，零貼 ID、零逐班部署
 
-前線／區管理層唔應該逐班入 Apps Script 設 properties。實際做法係：技術同事先做好「開班文件模版」一次；日常只維護一張 **CourseFactory控制台** Sheet。
+前線／區管理層唔應該逐班入 Apps Script 設 properties，亦唔使人手貼任何 ID。實際做法（詳見 [`../apps-script/COURSEHUB.md`](../apps-script/COURSEHUB.md)）：
 
-「設定」分頁只需要 A欄 label、B欄 value：
+1. 開**一張**「訓練班系統」GS（原點）→ 貼**一個檔案**（`apps-script/CourseHub.gs`）→ **部署一次**。
+2. 手動 run 一次 `setup()` → 自動建立／整理：`設定`、`訓練班登記`、`_Auth`、`_Meta` 分頁＋「訓練班文件」資料夾＋「開班文件模版」GS（模版結構由 `CourseHub.gs`〔一〕模版規格段數據驅動）。
+3. 「設定」分頁只需要 A欄 label、B欄 value（**全部可留空**）：
 
 | A欄 | B欄 |
 |---|---|
-| 模版GS檔案ID | 開班文件模版 GS file id |
-| 開班文件資料夾ID | 新班 GS 放置 folder id |
-| 課程API網址 | 課程 backend `/exec` |
 | 成員系統報名網址 | 可留空；有就自動組 direct registration link |
-| 區管理電郵 | 可留空；有就自動分享新 GS |
+| 區管理電郵 | 可留空；有就自動分享新班 GS |
 | 開班碼 | 可留空；留空即新開空白班免開班碼 |
+| FPS 識別碼／FPS 戶口名稱／區會網址 | 自動寫入每班參數（通告／收費用） |
+| 模版檔案模式 | `auto`（預設，模版由 setup 自動起）；`manual`＝用人手模版（逃生口） |
 
 之後職員只會見到「新開班」同「從登記表選班」。開錯班用隱藏後台刪；唔需要佢哋記 Script URL / API Key / courseId。
 
 ## 開錯班點刪？
 
-新開班可以不設開班碼，所以可能有人開錯空白班。這種班未經區管理系統批核／掛載，對外無效；但為免登記表越來越亂，CourseFactory 有一個隱藏後台清理入口。
+新開班可以不設開班碼，所以可能有人開錯空白班。這種班未經區管理系統批核／掛載，對外無效；但為免登記表越來越亂，訓練班系統後端有一個隱藏後台清理入口（`adminListCourses`／`adminDeleteCourse`）。
 
-在訓練班系統首頁連按 Logo 7 下，會開啟後台清理；輸入 CourseFactory `/exec` 及後台帳密後，可以刪除開錯班登記，並可選擇將該 GS 移到 Drive 垃圾桶。後台帳密只在 GS 後端程式內，不會在一般前端畫面顯示。
+在訓練班系統首頁連按 Logo 7 下，會開啟後台清理；輸入訓練班系統 `/exec` 及後台帳密後，可以刪除開錯班登記，並可選擇將該 GS 移到 Drive 垃圾桶。後台帳密只在 GS 後端程式內，不會在一般前端畫面顯示。
 
 
 ## 報名表對準位喺邊？
 
 唔需要前線人手入。對準報名表用嘅係系統內部 `publicCourseId`：
 
-1. CourseFactory 新開班時自動產生 `publicCourseId`。
-2. 它會寫入訓練班 GS「參數」及 CourseFactory「訓練班登記」。
+1. 訓練班系統後端（新制 CourseHub／舊制 CourseFactory）新開班時自動產生 `publicCourseId`。
+2. 它會寫入訓練班 GS「參數」及原點 GS「訓練班登記」。
 3. 區管理系統人手只輸入：訓練班 Script URL、通告編號、網頁通告 URL。
 4. 區管理系統用 Script URL 讀到該班資料／`publicCourseId`，並存入自己的 CourseLinks row。
 5. 掛載到成員系統時，成員系統用這個 `publicCourseId` 找回應寫入哪一班訓練班 Sheet。
 
-所以「對準碼」不應該叫職員輸入；它係 CourseFactory／區管理系統之間自動傳遞的隱藏 ID。舊班如果沒有 `publicCourseId`，區管理系統可以根據通告編號自動生成一個，再回寫到訓練班參數。
+所以「對準碼」不應該叫職員輸入；它係訓練班系統／區管理系統之間自動傳遞的隱藏 ID。舊班如果沒有 `publicCourseId`，區管理系統可以根據通告編號自動生成一個，再回寫到訓練班參數。

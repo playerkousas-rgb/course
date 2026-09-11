@@ -1,13 +1,32 @@
-# 前端 × 每班 Code.gs.course.js 合約
+# 前端 × 訓練班後端合約（CourseHub 單一原點／舊制每班部署通用）
 
-> 本 APP 係 Script 註釋所講嘅「**職員前端**」：讀全文（帶 rev）→ 改 → 一次過 `saveCourseBatch`。
-> 正本：`scout-district-portal/gs/Code.gs.course.js`（v4.13.0 模版座標）。
+> 本 APP 係「**職員前端**」：讀全文（帶 rev）→ 改 → 一次過 `saveCourseBatch`。
+> 後端有兩制，**合約完全相同**：
+> - **新制（v6.0.0+）CourseHub**：一張「訓練班系統 GS」原點＋一個共用 `/exec`，
+>   所有班靠登記表對應（**單一檔案** `apps-script/CourseHub.gs`，部署指南見
+>   [`apps-script/COURSEHUB.md`](../apps-script/COURSEHUB.md)）
+> - **舊制**：每班 GS bound `Code.gs.course.js`（v4.13.0 模版＋coursev5 模組）
+> 座標正本：`scout-district-portal/gs/Code.gs.course.js`（v4.13.0 模版座標）。
 
 ## 傳輸
 
 - `POST /exec`，`Content-Type: text/plain;charset=utf-8`（唔觸發 CORS preflight），body 係 JSON
-- 所有 action 都要 `apiKey`（SHA-256 hash 對 Script Properties `API_KEY_HASH`）
+- 所有 course action 都要 `apiKey`：
+  - 舊制：SHA-256 hash 對該班 Script Properties `API_KEY_HASH`
+  - 新制（hub）：SHA-256 hash 對原點 GS「訓練班登記」嘅 `API Key hash` 欄（登記表唔存明文）
 - 回應：`{ok:true,data:…}` / `{ok:false,error:…}`；衝突另加 `conflict:true,rev,savedAt,by`
+
+## CourseHub 對應規則（新制：單一 /exec 讀寫正確班別）
+
+- 「訓練班登記」每班一行：`內部課程ID／公開課程ID／課程名稱／API Key hash／GS檔案ID／GS網址／Script /exec（舊班）／狀態／班領導人／建立時間`
+- 每個 course action：`apiKey` hash → 登記表行 → `SpreadsheetApp.openById(fileId)`；
+  可另帶 `publicCourseId`／`courseId` 覆核（同 key 唔對應即拒絕）
+- 每班密碼存原點隱藏 `_Auth` 分頁（冇行＝首次 1234）；錯 5 次鎖 10 分鐘（按班獨立）
+- 明文 API Key 只出現喺 `createCourse` 回應（一次）＋ `_Auth`（「從登記表選班」憑班密碼取回）
+- 每班 Sheet 由 hub `createCourse` 自動 `makeCopy` 模版產生＋登記；模版由 `setup()`
+  照 `CourseHub.gs`〔一〕模版規格段自動起——**人手零貼 ID、零逐班部署**
+- 舊班行（登記表有自己 `/exec`）：course actions 唔經 hub，前端照舊直連該班 /exec；
+  `connectCourseByPassword` 會 proxy 去該班驗證
 
 ## 用到嘅 actions
 
@@ -24,7 +43,9 @@
 | `getCourseSheetRaw` | — | `{input01,input02,input03,input04,resp,paramsWX,notice,attend,accept,finance,completion,cert,subsidy,pulledAt,rev,revSavedAt,revBy}` | 主同步（15 秒輪詢）；rev 供樂觀鎖；`attend`（Print_學員出席紀錄）係 coursev5 加嘅 dump |
 | `getCourseProfile` | — | 課程結構資料 | 連線測試＋解鎖頁職員名單 |
 | `getCourseSummary` | — | 見下「getCourseSummary 精簡批核 view」 | **區管理系統批核用**（`apps-script/Summary.gs`）：管理層只睇最重要嘅資料——一個 call 攞齊課程資料・節次・職員・預算 8 大類・通告要點（檔案編號/訓練班電郵）・批准狀態・報名數，減省行政時間。純讀、唔 bump rev |
-| `createCourse` | `masterKey`(開班碼),`courseName`,`edition?,section?,badge?,intake?,fee?,clName?` | `{exec,apiKey,courseId,publicCourseId,directRegUrl,courseName,firstLogin,url}` | **區級 CourseFactory**（`apps-script/CourseFactory.gs` 獨立部署）:CL 新開班**即刻起真 GS**（區管理系統 SCRIPT 要 URL 先連結批核）——copy 模版＋預填＋產 apiKey＋回傳 GS `url` 交區;APP 即刻連線 |
+| `createCourse` | `masterKey`(開班碼,可選),`courseName`,`edition?,section?,badge?,intake?,fee?,clName?,clTitle?,sessions?` | `{exec,apiKey,courseId,publicCourseId,directRegUrl,courseName,firstLogin,url}` | **CourseHub**（新制）／舊制 CourseFactory：CL 新開班**即刻自動起班 Sheet＋登記**——`makeCopy` 模版＋預填 Input01/02（`sessions` 可選預填節次）＋產三件套（內部課程ID／公開課程ID／API Key）＋回傳 GS `url` 交區;APP 即刻連線。新制回傳 `exec`＝hub /exec（所有班共用） |
+| `hubInfo` | — | `{hubVersion,templateVersion,setupAt,ready,courses{active,archived}}` | **CourseHub**：診斷（GET /exec 亦回同樣資料）；前端／區系統確認原點已 setup |
+| `importCourse` | `adminUser,adminPassword,fileId,apiKey?,scriptExecUrl?,name?,publicCourseId?` | `{imported,courseId,publicCourseId,name}` | **CourseHub 後台**：舊制班登記入原點（保留該班自己 /exec；選班時 proxy 驗證） |
 | `setRegStatus` | `id`(=時間戳記),`status`(pending/approved/rejected/cancelled),`reviewer` | `{saved,id,status}` | 收生：接納/拒絕/取消。**唔檢查 rev、唔 bump rev**（identity 定位，安全） |
 | `saveCourseBatch` | `cells[{tab,row,col,value}]`,`baseRev`,`by` | `{saved,rev,savedAt,updated,skippedTabs}` | 批次寫格（開班文件／通告／分組） |
 | `addExpenseRow` | `amounts{B..J}`,`note` | `{added,row,receiptNo}` | 〔二階段〕支出 append-only，唔撞 rev |
@@ -57,7 +78,7 @@
 
 ## 通告 direct 報名連結
 
-通告上只印**成員系統報名入口**，參加者不會見到訓練班 Script `/exec`。用來「對準報名表」的不是人手輸入欄，而是 `publicCourseId`：CourseFactory 開班時自動產生並寫入訓練班 GS「參數」及 CourseFactory「訓練班登記」。區管理系統只需人手輸入訓練班 `Script URL`、`通告編號`、`網頁通告 URL`；系統讀取／保存同一個 `publicCourseId` 到 CourseLinks，掛載到成員系統時用它作內部對應。成員系統不用人手設定；舊班如沒有 `publicCourseId`，區管理系統可自動生成一個並回寫。
+通告上只印**成員系統報名入口**，參加者不會見到訓練班 Script `/exec`。用來「對準報名表」的不是人手輸入欄，而是 `publicCourseId`：CourseHub（新制）／CourseFactory（舊制）開班時自動產生並寫入訓練班 GS「參數」及原點 GS「訓練班登記」。新制所有班嘅 `Script URL` 都係同一條 hub `/exec`，區管理系統靠 `publicCourseId` 對應；掛載到成員系統時用它作內部對應。成員系統不用人手設定；舊班如沒有 `publicCourseId`，區管理系統可自動生成一個並回寫。
 
 ## Budget 版本批核
 

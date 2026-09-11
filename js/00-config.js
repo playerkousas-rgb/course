@@ -224,5 +224,6 @@ const LS = {
   qr: id => 'courseapp.qr.' + id,
   mock: 'courseapp.mock.v1',
   mockCourses: 'courseapp.mockcourses.v1',
+  mockRegistry: 'courseapp.mockregistry.v1',   /* hub 登記表（對應之源）鏡像 */
 };
 const SS_UNLOCKED = 'courseapp.unlocked';
