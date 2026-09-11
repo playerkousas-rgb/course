@@ -8,9 +8,10 @@ const { makeCtx, load, val, ok, eq, section, done } = require('./harness');
 const ctx = makeCtx();
 load(ctx, [
   'js/00-config.js', 'js/30-parse.js', 'js/15-mock.js',
+  'tests/gas-shim.js',
   'apps-script/CourseHub.gs',   /* 單一檔案：〔一〕模版規格段係純數據；同 GAS setup 同源 */
 ]);
-const G = val(ctx, '({ RESP_HEADERS, RC, TAB, MockAPI, MOCK_API_KEY, MockDemo, TPL_TABS, TPL_RESP_HEADERS, IN3_LAYOUT })');
+const G = val(ctx, '({ RESP_HEADERS, RC, TAB, MockAPI, MOCK_API_KEY, MOCK_OPS_KEY, MockDemo, TPL_TABS, TPL_RESP_HEADERS, IN3_LAYOUT })');
 
 function tpl(name) { return G.TPL_TABS.filter(t => t.name === name)[0] || null; }
 function gridOf(cells, rows, cols) {
@@ -89,7 +90,7 @@ async function main() {
   /* ══ Hub 語義（單一 mock /exec＋登記表對應） ══ */
   section('hubInfo');
   const hi = await G.MockAPI.call('hubInfo', {});
-  ok(hi.ok && /^6\.1\.0/.test(hi.data.hubVersion), 'hub 版本');
+  ok(hi.ok && /^6\.2\.0/.test(hi.data.hubVersion), 'hub 版本');
   ok(hi.data.ready === true && hi.data.courses.active >= 1, 'hub ready＋班數');
   ok(typeof hi.data.ownerEmail === 'string' && /.+@.+\..+/.test(hi.data.ownerEmail), 'ownerEmail（原點帳戶電郵：分享指引用）');
 
@@ -111,15 +112,23 @@ async function main() {
   const bad = await G.MockAPI.call('getCourseSheetRaw', { apiKey: 'ck_wrong' });
   ok(!bad.ok && /apiKey/.test(bad.error), '錯 key → Unauthorized');
 
+  section('首登強制改密碼（未改 1234 封鎖寫入；讀取照得）');
+  const gateA = await G.MockAPI.call('saveCourseBatch', { apiKey: KA, cells: [{ tab: G.TAB.IN2, row: 4, col: 2, value: 99 }], by: '懶人' });
+  ok(!gateA.ok && gateA.mustChangePassword === true, '新班未改密碼 → 寫入被拒');
+  const gateRead = await G.MockAPI.call('getCourseSheetRaw', { apiKey: KA });
+  ok(gateRead.ok, '未改密碼都可以讀取（職員揀名流程唔受阻）');
+  const setPwA = await G.MockAPI.call('setPassword', { apiKey: KA, oldPassword: '1234', newPassword: 'classAAA' });
+  ok(setPwA.ok, 'A 班改密碼');
+
   section('班隔離（獨立 rev／獨立密碼）');
   const cc2 = await G.MockAPI.call('createCourse', { courseName: 'Hub 測試班 B', clName: '李美芬' });
   const KB = cc2.data.apiKey, PIDB = cc2.data.publicCourseId;
   const svA = await G.MockAPI.call('saveCourseBatch', { apiKey: KA, cells: [{ tab: G.TAB.IN2, row: 4, col: 2, value: 22 }], by: '陳大文' });
-  ok(svA.ok && svA.data.rev === 1, 'A 班 rev bump');
+  ok(svA.ok && svA.data.rev === 1, 'A 班改完密碼 → rev bump');
   const rawB = await G.MockAPI.call('getCourseSheetRaw', { apiKey: KB });
   eq(rawB.data.rev, 0, 'B 班 rev 唔受 A 班影響');
-  const setPwA = await G.MockAPI.call('setPassword', { apiKey: KA, oldPassword: '1234', newPassword: 'classAAA' });
-  ok(setPwA.ok, 'A 班改密碼');
+  const gateB = await G.MockAPI.call('setRegStatus', { apiKey: KB, id: 'x', status: 'approved' });
+  ok(!gateB.ok && gateB.mustChangePassword === true, 'B 班仲係 1234 → 批核寫入同樣被拒');
   const authB = await G.MockAPI.call('auth', { apiKey: KB, password: '1234' });
   ok(authB.ok && authB.data.firstLogin === true, 'B 班仍然 1234／firstLogin（密碼按班）');
 
@@ -131,6 +140,29 @@ async function main() {
   eq(rawB2.data.resp[1][G.RC['_courseId'] - 1], PIDB, '_courseId＝B 班公開課程ID');
   const rawDemo = await G.MockAPI.call('getCourseSheetRaw', { apiKey: G.MOCK_API_KEY });
   eq(rawDemo.data.resp.length, 11, 'demo 班完全唔受影響');
+  /* write-only：公開面只准 addReg，讀取／用內部 ID 一律拒絕 */
+  const pubRead = await G.MockAPI.call('getCourseSheetRaw', { publicCourseId: PIDB });
+  ok(!pubRead.ok && /apiKey/i.test(pubRead.error), '冇 key 只憑公開ID → 唔可以讀取');
+  const nrInner = await G.MockAPI.call('addReg', { courseId: cc2.data.courseId, email: 'inner@example.hk', nameZh: '內部ID試', phone: '61000002', receiptDataUrl: 'data:image/png;base64,x' });
+  ok(!nrInner.ok, 'keyless addReg 唔接受內部 courseId（只接受公開ID）');
+
+  section('區系統密匙 opsKey（tick 區會批准／批核／財務白名單）');
+  const noOps = await G.MockAPI.call('setParamLabel', { publicCourseId: PIDB, label: '區會批准', value: '✔' });
+  ok(!noOps.ok && /區系統密匙/.test(noOps.error), 'setParamLabel 冇密匙 → 拒絕');
+  const badOps = await G.MockAPI.call('setParamLabel', { opsKey: 'ops_wrong', publicCourseId: PIDB, label: '區會批准', value: '✔' });
+  ok(!badOps.ok, 'setParamLabel 錯密匙 → 拒絕');
+  const tick = await G.MockAPI.call('setParamLabel', { opsKey: G.MOCK_OPS_KEY, publicCourseId: PIDB, label: '區會批准', value: '✔' });
+  ok(tick.ok && tick.data.saved === true, 'opsKey tick「區會批准」成功');
+  const rawB3 = await G.MockAPI.call('getCourseSheetRaw', { apiKey: KB });
+  ok(rawB3.data.paramsWX.some(r => r[0] === '區會批准' && r[1] === '✔'), 'B 班參數頁真係被 tick ✔');
+  const opsSum = await G.MockAPI.call('getCourseSummary', { opsKey: G.MOCK_OPS_KEY, publicCourseId: PIDB });
+  ok(opsSum.ok, 'opsKey 睇 getCourseSummary（白名單）');
+  const opsRegs = await G.MockAPI.call('listRegs', { opsKey: G.MOCK_OPS_KEY, publicCourseId: PIDB });
+  ok(opsRegs.ok, 'opsKey 睇 listRegs（白名單）');
+  const opsWrite = await G.MockAPI.call('saveCourseBatch', { opsKey: G.MOCK_OPS_KEY, publicCourseId: PIDB, cells: [] });
+  ok(!opsWrite.ok, 'opsKey 唔可以改班內容（saveCourseBatch 唔喺白名單）');
+  const opsPw = await G.MockAPI.call('setPassword', { opsKey: G.MOCK_OPS_KEY, publicCourseId: PIDB, oldPassword: 'x', newPassword: 'yyyy' });
+  ok(!opsPw.ok, 'opsKey 唔可以改班密碼');
 
   section('從登記表選班（輸入班密碼取回連線資料）');
   const lc = await G.MockAPI.call('listCourses', {});
@@ -158,6 +190,9 @@ async function main() {
   section('後台（清理開錯班）');
   const al = await G.MockAPI.call('adminListCourses', { adminUser: 'sheep', adminPassword: '0728' });
   ok(al.ok && al.data.courses.some(c => c.publicCourseId === PIDB && c.apiKey === KB), '後台見到秘密資料');
+  ok(al.ok && al.data.secrets && al.data.secrets.opsKey === G.MOCK_OPS_KEY && al.data.secrets.adminPassword === '0728', '後台一併取回交接密匙（opsKey／後台密碼）');
+  const badAdmin = await G.MockAPI.call('adminListCourses', { adminUser: 'sheep', adminPassword: 'wrong' });
+  ok(!badAdmin.ok, '錯後台密碼 → Unauthorized');
   const del = await G.MockAPI.call('adminDeleteCourse', { adminUser: 'sheep', adminPassword: '0728', publicCourseId: PIDB, trashFile: true });
   ok(del.ok && del.data.deleted === true, '刪除開錯班');
   const gone = await G.MockAPI.call('getCourseSheetRaw', { apiKey: KB });
@@ -211,8 +246,12 @@ async function main() {
   const connR = await G.MockAPI.call('connectCourseByPassword', { publicCourseId: rc.data.publicCourseId, password: '1234' });
   ok(connR.ok && connR.data.apiKey === rc.data.apiKey && connR.data.exec === 'mock', '選班 → 登記班照常取回連線');
   ok(connR.ok && connR.data.firstLogin === true, '登記班首次密碼 1234＋firstLogin');
+  const gateR = await G.MockAPI.call('saveCourseBatch', { apiKey: rc.data.apiKey, cells: [{ tab: G.TAB.IN2, row: 4, col: 2, value: 20 }], by: '張小美' });
+  ok(!gateR.ok && gateR.mustChangePassword === true, '登記班一樣要先改預設密碼');
+  const spR = await G.MockAPI.call('setPassword', { apiKey: rc.data.apiKey, oldPassword: '1234', newPassword: 'classRRR' });
+  ok(spR.ok, '登記班改密碼');
   const rawR2 = await G.MockAPI.call('saveCourseBatch', { apiKey: rc.data.apiKey, cells: [{ tab: G.TAB.IN2, row: 4, col: 2, value: 20 }], by: '張小美' });
-  ok(rawR2.ok && rawR2.data.rev === 1, '登記班寫入＋rev bump 照 coursev5 合約');
+  ok(rawR2.ok && rawR2.data.rev === 1, '登記班改完密碼 → 寫入＋rev bump 照 coursev5 合約');
 
   section('hubRepairTemplate_（GAS 函式：只補缺、唔覆蓋既有內容）');
   function mkFakeSheet(name) {
@@ -254,6 +293,33 @@ async function main() {
   eq(repHead[2], '中文姓名', '空缺嘅表頭格先補返（col3）');
   ok(!!fakeSheets['Input01 訓練班預算'] && !!fakeSheets['參數'], '缺分頁補分頁（Input01／參數）');
   ok(!!fakeSheets['_Sync'] && String(fakeSheets['_Sync'].grid[0][0]) === '0' && fakeSheets['_Sync'].hidden === true, '_Sync 補建（rev 0＋隱藏）');
+
+  /* ══ CourseHub.gs 函式層：setup 密匙／後台帳密（唔再寫死 repo） ══ */
+  section('setup 自動產生區系統密匙＋後台密碼（設定分頁＝保險箱）');
+  const F = val(ctx, '({ hubEnsureConfigSheet_, hubConfig_, hubAdminOk_, hubCheckClassPassword_, hubSha256_, HUB_GATED_WRITES_, HUB_OPS_ACTIONS_, SpreadsheetApp, gasFakeSs })');
+  const freshSs = F.gasFakeSs([]);
+  F.SpreadsheetApp.__setActive(freshSs);
+  F.hubEnsureConfigSheet_(freshSs);
+  const cfg = F.hubConfig_(freshSs);
+  ok(/^ops_[A-Za-z0-9]{12,}/.test(cfg.opsPlain), '區系統密匙自動產生（ops_ 開頭）');
+  ok(cfg.opsHash === F.hubSha256_(cfg.opsPlain), '區系統密匙 hash 同步');
+  eq(cfg.adminUser, 'admin', '後台帳號預設 admin');
+  ok(/^adm_[A-Za-z0-9]{12,}/.test(cfg.adminPlain), '後台密碼自動產生（adm_ 開頭，唔再寫死 0728）');
+  ok(cfg.adminHash === F.hubSha256_(cfg.adminPlain), '後台密碼 hash 同步');
+  ok(F.hubAdminOk_({ adminUser: 'admin', adminPassword: cfg.adminPlain }), '後台帳密登入 OK');
+  ok(!F.hubAdminOk_({ adminUser: 'admin', adminPassword: 'wrong' }), '錯後台密碼拒絕');
+  ok(!F.hubAdminOk_({ adminUser: 'sheep', adminPassword: '0728' }), '舊寫死帳密 sheep/0728 已失效');
+  const blankSs = F.gasFakeSs([]);
+  F.SpreadsheetApp.__setActive(blankSs);   /* 未 run setup 嘅原點 */
+  ok(!F.hubAdminOk_({ adminUser: 'admin', adminPassword: 'x' }), '未 setup → 後台一律拒絕');
+  F.SpreadsheetApp.__setActive(freshSs);
+  const admLogin = F.hubCheckClassPassword_(freshSs, 'crs_any', 'admin:' + cfg.adminPlain);
+  ok(admLogin.ok && admLogin.role === 'admin', '「帳號:密碼」後備管理員登入用設定分頁密匙');
+  /* 白名單語義 */
+  ok(F.HUB_GATED_WRITES_.saveCourseBatch && F.HUB_GATED_WRITES_.setRegStatus, '首登閘封鎖儲存／批核寫入');
+  ok(!F.HUB_GATED_WRITES_.addReg && !F.HUB_GATED_WRITES_.setPassword && !F.HUB_GATED_WRITES_.auth, '首登閘放行 addReg／setPassword／auth');
+  ok(F.HUB_OPS_ACTIONS_.approveBudgetVersion && F.HUB_OPS_ACTIONS_.setPaymentCheck && F.HUB_OPS_ACTIONS_.getCourseSummary, 'ops 白名單＝批核／財務／讀數');
+  ok(!F.HUB_OPS_ACTIONS_.saveCourseBatch && !F.HUB_OPS_ACTIONS_.setPassword, 'ops 唔可以改班內容／密碼');
 
   G.MockDemo.reset();
   done();

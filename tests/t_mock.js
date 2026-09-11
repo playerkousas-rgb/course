@@ -267,6 +267,13 @@ async function main() {
   ok(nDump.rev === 0, '新班 rev 0');
   const au2 = await MockAPI.call('auth', { apiKey: NK, password: '1234' });
   ok(au2.ok && au2.data.firstLogin === true, '新班首次 1234（firstLogin）');
+  /* 首登強制改密碼：未改 1234 前封鎖寫入（讀取／報名唔阻） */
+  const gated = await MockAPI.call('saveCourseBatch', { apiKey: NK, cells: [{ tab: TAB.IN1, row: 11, col: 2, value: 24 }], by: '陳大文' });
+  ok(!gated.ok && gated.mustChangePassword === true, '未改預設密碼 → 寫入被拒（mustChangePassword）');
+  const gatedReg = await MockAPI.call('addReg', { publicCourseId: cc.data.publicCourseId, email: 'early@example.hk', nameZh: '早報名', phone: '61000001', receiptDataUrl: 'data:image/png;base64,x' });
+  ok(gatedReg.ok, '公開 addReg 唔受首登閘影響（成員系統照收）');
+  const sp2 = await MockAPI.call('setPassword', { apiKey: NK, oldPassword: '1234', newPassword: 'newclasspw' });
+  ok(sp2.ok, '新班改密碼');
   /* 新班寫入 → 自己 rev bump */
   const sv2 = await MockAPI.call('saveCourseBatch', { apiKey: NK, cells: [{ tab: TAB.IN1, row: 11, col: 2, value: 24 }], by: '陳大文' });
   ok(sv2.ok && sv2.data.rev === 1, '新班寫入 bump rev');

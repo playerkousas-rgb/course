@@ -42,7 +42,8 @@ function toast(msg, type, ms) {
 /* ── Modal ── */
 function modal(opts) {
   const ov = h('div', { class: 'modal-ov' + (opts.wide ? ' wide' : '') });
-  const closeBtn = h('button', { class: 'modal-x no-print', 'aria-label': '關閉', onclick: () => close() }, '✕');
+  const closeBtn = h('button', { class: 'modal-x no-print', 'aria-label': '關閉', onclick: () => { if (opts.dismissable !== false) close(); } }, '✕');
+  if (opts.dismissable === false) closeBtn.style.visibility = 'hidden';
   const card = h('div', { class: 'modal-card' },
     h('div', { class: 'modal-head' }, h('div', { class: 'modal-title', text: opts.title || '' }), closeBtn),
     h('div', { class: 'modal-body' }, opts.body || ''),
@@ -224,6 +225,24 @@ const UI = {
       Store.config.hubExec = fx; Store.config.factoryExec = fx; Store.saveConfig();
       const courses = (res.data && res.data.courses) || [];
       list.innerHTML = '';
+      /* 交接密匙（後台專用）：區系統密匙交區管理系統；後台密碼自行保存 */
+      const sc = res.data && res.data.secrets;
+      if (sc) {
+        function secretRow(label, val, hint) {
+          if (!val) return null;
+          const box = h('input', { class: 'input', value: val, readonly: 'readonly' });
+          return h('div', { class: 'field' },
+            h('label', { class: 'flabel' }, label),
+            h('div', { class: 'btn-row' }, box,
+              h('button', { class: 'btn btn-sm', onclick: () => { if (navigator.clipboard) navigator.clipboard.writeText(val).then(() => toast('✅ 已複製：' + label, 'ok')); } }, '複製')),
+            hint ? h('div', { class: 'row-sub' }, hint) : null);
+        }
+        list.appendChild(h('div', { class: 'card-in' },
+          h('div', { class: 'card-title' }, '🔑 系統密匙（交接用——淨係後台見到）'),
+          secretRow('區系統密匙 opsKey（貼入區管理系統）', sc.opsKey, '區管理系統靠佢 tick「區會批准」、睇 getCourseSummary／付款核對／Budget 批核；全區一條。'),
+          secretRow('後台帳號', sc.adminUser),
+          secretRow('後台密碼（遺失班密碼／後台清理用，唔好公開）', sc.adminPassword)));
+      }
       if (!courses.length) list.appendChild(h('div', { class: 'row-sub' }, '未有訓練班登記。'));
       courses.forEach(c => {
         const trash = h('input', { type: 'checkbox', checked: 'checked' });
@@ -494,8 +513,13 @@ const UI = {
         const course = Store.activeCourse();
         if (course && !course.mock && course.authV5 !== true) { course.authV5 = true; Store.saveConfig(); }
         const firstLogin = res.data && res.data.firstLogin && res.data.role !== 'admin';
-        enterSystem(firstLogin ? '（首次登入）' : '');
-        if (firstLogin) UI.promptChangePw(true);
+        if (firstLogin) {
+          /* 首次登入：後端封鎖一切寫入，必須改完密碼先入到系統 */
+          Store.setStaffName(staff);
+          UI.promptChangePw(true, () => enterSystem('（首次登入已改密碼）'));
+          return;
+        }
+        enterSystem('');
         return;
       }
 
@@ -530,7 +554,7 @@ const UI = {
         h('div', { class: 'btn-row' },
           unlockBtn,
           h('button', { class: 'btn btn-ghost', onclick: () => { Store.config.activeId = null; Store.saveConfig(); UI.render(); } }, '切換訓練班')),
-        h('div', { class: 'foot-note' }, '每班第一次登入密碼 1234，入到會提示即刻改密碼'))));
+        h('div', { class: 'foot-note' }, '每班第一次登入密碼 1234——系統強制要改咗新密碼先入到，右上角 🔑 可隨時再改、🚪 登出切換班別'))));
 
     pwIn.addEventListener('keydown', (e) => { if (e.key === 'Enter') tryUnlock(); });
   },
@@ -543,13 +567,17 @@ const UI = {
       h('div', { class: 'head-staff', id: 'headStaff' }));
     const syncChip = h('button', { class: 'chip chip-sync', id: 'syncChip', title: '', onclick: () => this.syncDetail() }, '…');
     const saveChip = h('button', { class: 'chip chip-save', id: 'saveChip', onclick: () => this.showDraftsModal() }, '💾');
+    const pwBtn = h('button', { class: 'chip chip-menu', title: '更改本班共職員密碼', onclick: () => this.promptChangePw(false) }, '🔑');
+    const logoutBtn = h('button', { class: 'chip chip-menu', title: '登出／切換訓練班（未儲存草稿會保留）', onclick: () => {
+      Store.config.activeId = null; Store.saveConfig(); UI.render();
+    } }, '🚪');
     const menuBtn = h('button', { class: 'chip chip-menu', onclick: () => this.showSettings() }, '⚙️');
     const banner = h('div', { class: 'conflict-banner', id: 'conflictBanner', style: { display: 'none' },
       onclick: () => this.showConflictDialog(Store.resolveAgainstFresh().conflict, Store.resolveAgainstFresh().keep) });
 
     app.appendChild(h('div', { class: 'app-chrome' },
       h('header', { class: 'app-head no-print' }, headLeft,
-        h('div', { class: 'head-right' }, syncChip, saveChip, menuBtn)),
+        h('div', { class: 'head-right' }, syncChip, saveChip, pwBtn, logoutBtn, menuBtn)),
       banner,
       h('main', { class: 'app-main', id: 'page' }),
       h('nav', { class: 'app-nav no-print' },
@@ -684,8 +712,8 @@ const UI = {
     ] });
   },
 
-  /* ── 更改共職員密碼（後端驗證，全體生效；firstLogin=首次登入提示） ── */
-  promptChangePw: function (firstLogin) {
+  /* ── 更改共職員密碼（後端驗證，全體生效；firstLogin＝首次登入強制，唔可以跳過） ── */
+  promptChangePw: function (firstLogin, onDone, onClose) {
     const oldIn = h('input', { class: 'input', type: 'password', placeholder: '現時密碼（預設 1234）', autocomplete: 'off' });
     const p1 = h('input', { class: 'input', type: 'password', placeholder: '新密碼（至少 4 位）', autocomplete: 'new-password' });
     const p2 = h('input', { class: 'input', type: 'password', placeholder: '重複新密碼', autocomplete: 'new-password' });
@@ -701,27 +729,29 @@ const UI = {
         m.close();
         Store.pushLog('password', '已更改共職員密碼');
         toast('✅ 密碼已更新——對所有班職員即時生效', 'ok');
+        if (typeof onDone === 'function') onDone();
       } else {
         msg.textContent = (res && res.error) || '更新失敗';
         msg.className = 'form-msg err';
       }
     });
     const m = modal({
-      title: firstLogin ? '🔑 首次登入——請設定新密碼' : '🔑 更改共職員密碼',
+      title: firstLogin ? '🔑 首次登入——必須先設定新密碼' : '🔑 更改共職員密碼',
+      dismissable: !firstLogin,
+      onClose: onClose,
       body: h('div', {},
-        firstLogin ? h('div', { class: 'form-msg warn' }, '呢班仲用緊預設密碼 1234——改做班內密碼先至安全。新密碼對所有班職員生效。') : null,
+        firstLogin ? h('div', { class: 'form-msg warn' }, '呢班仲用緊預設密碼 1234——系統規定要改做班內密碼先可以使用。新密碼對所有班職員生效，改完唔可以再用 1234。') : null,
         h('div', { class: 'field' }, h('label', { class: 'flabel' }, '現時密碼'), oldIn),
         h('div', { class: 'field' }, h('label', { class: 'flabel' }, '新密碼'), p1),
         h('div', { class: 'field' }, h('label', { class: 'flabel' }, '重複新密碼'), p2),
         msg),
-      actions: [
-        firstLogin
-          ? h('button', { class: 'btn btn-ghost', onclick: () => { m.close(); toast('記得盡快喺 ⚙️ 設定更改密碼', 'warn'); } }, '稍後再改')
-          : h('button', { class: 'btn btn-ghost', onclick: () => m.close() }, '取消'),
+      actions: firstLogin ? [btn] : [
+        h('button', { class: 'btn btn-ghost', onclick: () => m.close() }, '取消'),
         btn,
       ],
     });
     setTimeout(() => oldIn.focus(), 50);
+    return m;
   },
 
   /* ── 設定 ── */

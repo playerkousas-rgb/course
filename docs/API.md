@@ -32,6 +32,22 @@
 - 舊班行（登記表有自己 `/exec`）：course actions 唔經 hub，前端照舊直連該班 /exec；
   `connectCourseByPassword` 會 proxy 去該班驗證
 
+### 三條密匙（v6.2 起）
+
+| 密匙 | 數量 | 喺邊 | 用途 |
+|---|---|---|---|
+| 開班碼 `masterKey` | 1（可選，預設留空＝唔使） | 「設定」分頁 | `createCourse`／`registerCourse`；留空＝任何拎到 /exec 嘅人都可以開班（只會產生空班、唔掂到已有班） |
+| **區系統密匙 `opsKey`** | 1（setup 自動產生） | 「設定」分頁，後台 `adminListCourses.secrets.opsKey` 可隨時取回 | 區管理系統**專用**：唔使逐班 apiKey，`opsKey`＋`publicCourseId` 即可；只通行白名單 action：`getCourseProfile`／`getCourseSummary`／`listRegs`／`listBudgetVersions`／`setPaymentCheck`／`setCourseRefund`／`approveBudgetVersion`；另 `setParamLabel`（tick「區會批准」等參數）必須帶 `opsKey`（舊開班碼 `masterKey` 仍相容） |
+| 後台帳密 `adminUser`／`adminPassword` | 1 組（setup 自動產生，帳號預設 `admin`） | 「設定」分頁，後台登入後 `secrets` 都有 | `adminListCourses`／`adminDeleteCourse`／`importCourse`；亦係每班登入頁「帳號:密碼」嘅後備管理員。**唔再寫死喺 code** |
+
+- **首登強制改密碼（v6.2）**：新班／新登記班未改預設密碼 `1234` 前，所有寫入 action（`saveCourseBatch`／`setRegStatus`／收支／批核／通知書…）回
+  `{ok:false, mustChangePassword:true, error}`，只放行 `auth`／`setPassword`；讀取唔阻，`addReg` 唔阻。改完密碼永久解鎖（之後改唔改隨班職員）。
+- **公開報名（成員系統）**：`addReg` 可**唔帶 apiKey**，只帶 `publicCourseId`（唔接受內部 `courseId`／`fileId`）；只可以 append「表格回應」，
+  回傳淨係 `{ok, refCode}`，**唔會讀返任何資料出嚟**；每班每 10 分鐘最多 20 個提交（CacheService 節流，防塞爆原點 Drive）；
+  `archived`／`completed` 狀態嘅班拒絕。其餘 action 淨係帶 `publicCourseId` 一律回 Unauthorized。
+- 公開連結上嘅 `publicCourseId` 本身係 48-bit 隨機 ID（估唔到、列舉唔到其他班），等同 Google Form「知連結先提交」能力；
+  提交一律入 pending，由 CL 逐筆批核，假報名唔會自動取錄。
+
 ## 用到嘅 actions
 
 | Action | 參數 | 回傳 | 前端用途 |
@@ -40,6 +56,8 @@
 | `setPassword` | `oldPassword,newPassword` | `{saved}` | 改共職員密碼（全體生效；新密碼 ≥4 位、≠1234、唔可以有 `:`） |
 | `setPaymentCheck` | `id`(=時間戳記),`verified`,`by` | `{saved,row,verified}` | **區管理系統財務用**：核對區帳戶後 tick「已核對收款」；identity 定位、唔 bump rev、自動補表頭 |
 | `setCourseRefund` | `id`(=時間戳記),`refunded`,`by` | `{saved,row,refunded}` | **區管理系統財務用**：已退款 tick，寫 AX/AY；CL App 只讀顯示 |
+| `setParamLabel` | `opsKey`,`fileId` 或 `publicCourseId`,`label`,`value` | `{saved,row,label}` | **區管理系統專用（v6.2 起必須 opsKey）**：寫班 GS「參數」分頁（tick「區會批准」、FPS 資料等）；CL App 唔呼叫 |
+| `addReg` | 職員：`apiKey`；**公開：只帶 `publicCourseId`**＋`nameZh,phone,email,receiptDataUrl,…` | `{refCode}` | 成員系統報名。公開途徑 write-only（唔使 key、唔回讀資料）、只接受公開ID、節流 20／10 分鐘／班、必填入數紙截圖；同電郵未取消紀錄防重複；pending 由 CL 批核 |
 | `sendRegNotice` | `ids?`,`by?` | `{sent,skipped,failed,results}` | **訓練班系統用**：CL 發接納／不接納通知書；ReplyTo=訓練班電郵；寫 AZ/BA 防重寄 |
 | `submitBudgetVersion` | `reason`,`by` | `{version,status,snapshot}` | **訓練班系統用**：提交 Budget V1/V2 給管理層批核 |
 | `listBudgetVersions` | — | `{versions,currentApproved}` | 查閱 Budget 版本紀錄 |
@@ -92,10 +110,13 @@
 - `approveBudgetVersion` 批准後會把該版本 snapshot 寫回 `Input01`，所以 `Print_財政預算`、收支表、完成報告使用的基準會自動變成最新已批 Budget，避免班職員照舊數用錯錢。
 - `_BudgetVersions` 只係同一張 Spreadsheet 入面嘅隱藏版本紀錄，不會拆散成多張 Sheet 檔案。
 
-## 密碼流程（coursev5）
-- 每班第一次登入 `1234`（GS 冇 `COURSE_PW_HASH` → `auth` 回 `firstLogin:true`）→ 前端即刻彈「請設定新密碼」
-- 改完 → `firstLogin:false`；密碼以 SHA-256 存 Script Properties
-- 錯 5 次 → 鎖 10 分鐘（CacheService）；重設方法見 `apps-script/COURSEV5-UPGRADE.md`
+## 密碼流程（coursev5／CourseHub v6.2）
+- 每班第一次登入 `1234`（`_Auth` 冇密碼 hash → `auth` 回 `firstLogin:true`）→ 前端彈**不可關閉**嘅「必須先設定新密碼」對話框，
+  未改之前後端封鎖所有寫入（`mustChangePassword:true`）；改完 → `firstLogin:false`
+- 密碼以 SHA-256 存原點隱藏 `_Auth` 分頁（CourseHub 新制；舊制獨立部署存 Script Properties）
+- 右上角常設 🔑 改密碼／🚪 登出掣（唔使入設定頁）
+- 錯 5 次 → 鎖 10 分鐘（CacheService，按班獨立）；重設：刪 `_Auth` 該班「密碼hash」格，或後備管理員「帳號:密碼」入設定頁改
+- 後備管理員帳密＝「設定」分頁嘅後台帳號／後台密碼（v6.2 起 setup 自動產生，唔再寫死 code）
 - **向下相容**：舊版後端（v4.13.0）冇 `auth` action → 前端自動退回本機密碼閘（1234），並標記該班「舊版後端」
 
 ## rev 語義（防呆核心，mock 已照做）

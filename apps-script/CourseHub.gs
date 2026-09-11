@@ -246,6 +246,11 @@ function hubConfigDefaults_() {
     ['區管理電郵', ''],
     ['開班碼', ''],
     ['開班碼SHA256', ''],
+    ['區系統密匙', ''],
+    ['區系統密匙SHA256', ''],
+    ['後台帳號', HUB_ADMIN_USER_DEFAULT],
+    ['後台密碼', ''],
+    ['後台密碼SHA256', ''],
     ['FPS 識別碼', ''],
     ['FPS 戶口名稱', ''],
     ['區會網址', ''],
@@ -307,6 +312,33 @@ function hubEnsureConfigSheet_(ss) {
   if (add.length) {
     var at = Math.max(sh.getLastRow(), 0) + 1;
     sh.getRange(at, 1, add.length, 2).setValues(add);
+  }
+  hubSeedSecrets_(sh);   /* 自動產生區系統密匙／後台密碼（只補空、唔覆蓋） */
+}
+
+/* 首次 setup 自動產生密匙（幂等：永遠唔覆蓋已有值）。
+ * 明文留喺「設定」分頁——呢張表視同保險箱，唔公開、日常唔使開；
+ * 遺失時入後台（Logo 連按 7 下）adminListCourses 都會回傳。 */
+function hubSeedSecrets_(sh) {
+  var labels = hubConfigDefaults_().map(function (p) { return p[0]; });
+  var vals = sh.getLastRow() ? sh.getRange(1, 1, sh.getLastRow(), 2).getValues() : [];
+  function rowOf(label) {
+    for (var i = 0; i < vals.length; i++) if (String(vals[i][0] || '').trim() === label) return i + 1;
+    return -1;
+  }
+  function setRow(r, v) { if (r > 0) sh.getRange(r, 2).setValue(v); }
+  /* 區系統密匙：ops_＋20 位隨機 */
+  var rOps = rowOf('區系統密匙'), rOpsH = rowOf('區系統密匙SHA256');
+  if (rOps > 0 && !String(vals[rOps - 1][1] || '').trim()) {
+    var ops = 'ops_' + Utilities.getUuid().replace(/-/g, '').slice(0, 20);
+    setRow(rOps, ops); setRow(rOpsH, hubSha256_(ops));
+  }
+  /* 後台密碼：adm_＋20 位隨機（後台帳號預設 admin） */
+  var rAdm = rowOf('後台帳號'), rPw = rowOf('後台密碼'), rPwH = rowOf('後台密碼SHA256');
+  if (rAdm > 0 && !String(vals[rAdm - 1][1] || '').trim()) setRow(rAdm, HUB_ADMIN_USER_DEFAULT);
+  if (rPw > 0 && !String(vals[rPw - 1][1] || '').trim()) {
+    var pw = 'adm_' + Utilities.getUuid().replace(/-/g, '').slice(0, 20);
+    setRow(rPw, pw); setRow(rPwH, hubSha256_(pw));
   }
 }
 
@@ -460,6 +492,8 @@ function hubConfig_(ss) {
   var aliases = {
     '開班碼': 'plainKey', '管理碼': 'plainKey',
     '開班碼SHA256': 'keyHash', 'FACTORY_KEY_HASH': 'keyHash',
+    '區系統密匙': 'opsPlain', '區系統密匙SHA256': 'opsHash',
+    '後台帳號': 'adminUser', '後台密碼': 'adminPlain', '後台密碼SHA256': 'adminHash',
     '成員系統報名網址': 'memberPortalUrl', 'MEMBER_PORTAL_URL': 'memberPortalUrl',
     '區管理電郵': 'opsEmail', 'OPS_EMAIL': 'opsEmail',
     'FPS 識別碼': 'fpsId', 'FPS 戶口名稱': 'fpsName', '區會網址': 'districtWeb',
@@ -471,6 +505,8 @@ function hubConfig_(ss) {
     out[aliases[label] || label] = String(row[1] == null ? '' : row[1]).trim();
   });
   if (!out.keyHash && out.plainKey) out.keyHash = hubSha256_(out.plainKey);
+  if (!out.opsHash && out.opsPlain) out.opsHash = hubSha256_(out.opsPlain);
+  if (!out.adminHash && out.adminPlain) out.adminHash = hubSha256_(out.adminPlain);
   return out;
 }
 
@@ -529,15 +565,36 @@ function hubSetMeta_(ss, key, value) {
  *   - 後備管理員「帳號:密碼」只寫喺下面常數
  *************************************************************/
 
-var HUB_VERSION = '6.1.0';
+var HUB_VERSION = '6.2.0';
 
-var HUB_ADMIN_USER = 'sheep';   /* 後台清理／後備管理員（只寫喺呢度） */
-var HUB_ADMIN_PW = '0728';
+/* 後台帳密／區系統密匙：setup() 自動產生，存「設定」分頁（唔再寫死喺 code／repo）。
+ * 後台帳號預設 admin；後台密碼 setup 時隨機產生，只顯示一次喺「設定」分頁，
+ * 日後遺失可用後台（Logo 7 下）adminListCourses 取回，或直接開「設定」分頁睇。 */
+var HUB_ADMIN_USER_DEFAULT = 'admin';
 
 var HUB_DEFAULT_PW = '1234';
 var HUB_PW_MIN_LEN = 4;
 var HUB_PW_MAX_FAIL = 5;
 var HUB_PW_LOCK_MINUTES = 10;
+
+/* 首次開班未改預設密碼 1234 前，封鎖所有寫入（只留 auth／setPassword；addReg 由成員系統照收） */
+var HUB_GATED_WRITES_ = {
+  saveCourseBatch: 1, setCourseCells: 1, setRegStatus: 1,
+  addExpenseRow: 1, setCompletionRow: 1, setCertRow: 1,
+  setPaymentCheck: 1, setCourseRefund: 1, sendRegNotice: 1,
+  submitBudgetVersion: 1, approveBudgetVersion: 1
+};
+
+/* 區系統密匙（opsKey）可做嘅 action：睇數＋批核＋財務記錄；唔可以改班內容／密碼 */
+var HUB_OPS_ACTIONS_ = {
+  getCourseProfile: 1, getCourseSummary: 1, listRegs: 1,
+  listBudgetVersions: 1, setPaymentCheck: 1, setCourseRefund: 1,
+  approveBudgetVersion: 1
+};
+
+/* 公開 addReg（只憑 publicCourseId，write-only）節流：每班每 10 分鐘最多 20 個提交，防塞 Drive */
+var HUB_REG_FLOOD_MAX = 20;
+var HUB_REG_FLOOD_SECONDS = 600;
 
 function hubJsonOut_(obj) {
   return ContentService.createTextOutput(JSON.stringify(obj))
@@ -575,10 +632,16 @@ function doPost(e) {
     if (a === 'adminListCourses') return hubJsonOut_(hubAdminList_(b));
     if (a === 'adminDeleteCourse') return hubJsonOut_(hubAdminDelete_(b));
     if (a === 'importCourse') return hubJsonOut_(hubImportCourse_(b));
+    /* addReg 公開例外：成員系統只憑 publicCourseId 提交，write-only（見 hubPublicRegRow_） */
+    if (a === 'addReg' && !String(b.apiKey || '').trim()) {
+      var pr = hubPublicRegRow_(b);
+      if (!pr.ok) return hubJsonOut_(pr);
+      return hubJsonOut_(hubDispatchCourse_('addReg', pr.row, b, { publicWrite: true }));
+    }
     /* course actions：對應到班 → 行 coursev5 合約 */
     var r = hubRequireCourse_(b);
     if (!r.ok) return hubJsonOut_(r);
-    return hubJsonOut_(hubDispatchCourse_(a, r.row, b));
+    return hubJsonOut_(hubDispatchCourse_(a, r.row, b, r.ops ? { ops: true } : null));
   } catch (err) {
     return hubJsonOut_({ ok: false, error: String(err && err.message ? err.message : err) });
   }
@@ -708,6 +771,8 @@ function hubRequireCourse_(b) {
   if (!meta['模版檔案ID'] && !hubRegistryRows_(ss).length) {
     return { ok: false, error: '訓練班系統 GS 未 run setup()——請先喺 Apps Script 編輯器手動執行一次' };
   }
+  var cfg = hubConfig_(ss);
+  var opsOk = !!(cfg.opsHash && hubSha256_(String(b.opsKey || '')) === cfg.opsHash);
   var key = String(b.apiKey || '').trim();
   var rows = hubRegistryRows_(ss);
   var row = null;
@@ -731,7 +796,12 @@ function hubRequireCourse_(b) {
       return { ok: false, error: 'API Key 同課程 ID 唔對應——請確認用返該班嘅連線資料' };
     }
     row = byId;
-    if (!key) return { ok: false, error: 'Unauthorized: invalid or missing apiKey' };
+    if (!key) {
+      /* 區管理系統：opsKey 係全區單一密匙，只准睇數／批核／財務 action（白名單） */
+      if (opsOk && HUB_OPS_ACTIONS_[String(b.action || '')]) return { ok: true, row: row, ops: true };
+      if (opsOk) return { ok: false, error: '區系統密匙只可用於批核／財務 action（' + String(b.action || '') + ' 不在白名單）' };
+      return { ok: false, error: 'Unauthorized: invalid or missing apiKey' };
+    }
   }
 
   if (!row) return { ok: false, error: 'Unauthorized: invalid or missing apiKey' };
@@ -739,6 +809,23 @@ function hubRequireCourse_(b) {
     return { ok: false, error: '呢個班用緊獨立部署（舊制）——請用該班自己嘅 /exec 連線' };
   }
   return { ok: true, row: row };
+}
+
+/* 成員系統公開報名：只接受公開課程ID（唔接受內部 courseId／fileId），只准 append「表格回應」 */
+function hubPublicRegRow_(b) {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var pid = String((b && b.publicCourseId) || '').trim();
+  if (!pid) return { ok: false, error: '資料不完整（欠缺課程 ID）' };
+  var rows = hubRegistryRows_(ss);
+  for (var i = 0; i < rows.length; i++) {
+    if (rows[i].publicCourseId === pid) {
+      if (rows[i].exec) return { ok: false, error: '此課程請用佢自己嘅報名連結' };
+      var st = String(rows[i].status || 'active');
+      if (st === 'archived' || st === 'completed') return { ok: false, error: '此課程已截止報名' };
+      return { ok: true, row: rows[i] };
+    }
+  }
+  return { ok: false, error: '找不到該訓練班——報名連結可能已失效，請用通告上最新連結' };
 }
 
 /* keyed lock（CacheService token spin；best-effort）——
@@ -765,7 +852,17 @@ function hubUnlock_(courseId, token) {
 
 /* ══════════ Course action 分發（coursev5 合約；CourseSheet.gs 實作）══════════ */
 
-function hubDispatchCourse_(action, row, b) {
+function hubDispatchCourse_(action, row, b, opts) {
+  opts = opts || {};
+  var hub = SpreadsheetApp.getActiveSpreadsheet();
+  /* 首次開班強制改密碼：未改 1234 前封鎖寫入（區系統／公開報名途徑唔受影響） */
+  if (!opts.ops && !opts.publicWrite && HUB_GATED_WRITES_[action]) {
+    var ga = hubAuthRows_(hub)[row.courseId] || {};
+    if (!ga.pwHash) {
+      return { ok: false, mustChangePassword: true,
+        error: '呢班仲用緊預設密碼 1234——必須先改做班內密碼先可以儲存／批核（請重新登入並按提示更改）' };
+    }
+  }
   var ss = SpreadsheetApp.openById(row.fileId);
   var lock = null;
   var WRITE = {
@@ -1074,7 +1171,9 @@ function hubCheckClassPassword_(ss, courseId, password) {
   var pw = String(password == null ? '' : password);
   if (pw.indexOf(':') >= 0) {
     var i = pw.indexOf(':');
-    if (pw.slice(0, i) === HUB_ADMIN_USER && pw.slice(i + 1) === HUB_ADMIN_PW) {
+    var cfg = hubConfig_(ss);
+    if (cfg.adminUser && cfg.adminHash &&
+      pw.slice(0, i) === cfg.adminUser && hubSha256_(pw.slice(i + 1)) === cfg.adminHash) {
       c.remove('hubpwf_' + courseId);
       return { ok: true, role: 'admin', firstLogin: false };
     }
@@ -1103,8 +1202,10 @@ function hubPwFail_(c, courseId) {
 /* ══════════ Hub action：管理／遷移 ══════════ */
 
 function hubAdminOk_(b) {
-  return String((b && (b.adminUser || b.user)) || '') === HUB_ADMIN_USER &&
-    String((b && (b.adminPassword || b.password)) || '') === HUB_ADMIN_PW;
+  var cfg = hubConfig_(SpreadsheetApp.getActiveSpreadsheet());
+  if (!cfg.adminHash) return false;   /* 未 run 新版 setup()：「設定」未有後台密碼 */
+  return String((b && (b.adminUser || b.user)) || '') === (cfg.adminUser || HUB_ADMIN_USER_DEFAULT) &&
+    hubSha256_(String((b && (b.adminPassword || b.password)) || '')) === cfg.adminHash;
 }
 
 /* 隱藏後台：列出所有已開班（同舊 CourseFactory 回傳結構一致） */
@@ -1126,7 +1227,17 @@ function hubAdminList_(b) {
           url: r.url, gsUrl: r.url, directRegUrl: '',
           status: r.status, cl: r.cl, createdAt: r.createdAt
         };
-      })
+      }),
+      /* 交接用：後台登入後先回傳——冇開班碼之下，呢度係攞返密匙嘅官方途徑（唔使開張 Sheet） */
+      secrets: (function () {
+        var cfg = hubConfig_(ss);
+        return {
+          adminUser: cfg.adminUser || '', adminPassword: cfg.adminPlain || '',
+          opsKey: cfg.opsPlain || '',
+          memberPortalUrl: cfg.memberPortalUrl || '', opsEmail: cfg.opsEmail || '',
+          fpsId: cfg.fpsId || '', fpsName: cfg.fpsName || '', districtWeb: cfg.districtWeb || ''
+        };
+      })()
     }
   };
 }
@@ -1190,9 +1301,11 @@ function hubImportCourse_(b) {
 function hubSetParamLabel_(b) {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var cfg = hubConfig_(ss);
-  if (cfg.keyHash && hubSha256_((b && b.masterKey) || '') !== cfg.keyHash) {
-    return { ok: false, error: '管理碼不正確' };
-  }
+  /* 區會批准／FPS 等參數一律由區管理系統寫入：必須帶區系統密匙（opsKey）。
+   * 向後相容：如「設定」仍用緊舊開班碼（keyHash），masterKey 一樣接受。 */
+  var opsOk = cfg.opsHash && hubSha256_(String((b && b.opsKey) || '')) === cfg.opsHash;
+  var masterOk = cfg.keyHash && hubSha256_(String((b && b.masterKey) || '')) === cfg.keyHash;
+  if (!opsOk && !masterOk) return { ok: false, error: '區系統密匙不正確——setParamLabel 只接受區管理系統呼叫' };
   var fileId = String((b && (b.fileId || b.courseId)) || '').trim();
   var label = String((b && b.label) || '').trim();
   if (!fileId || !label) return { ok: false, error: 'missing fileId/label' };
@@ -1381,6 +1494,12 @@ function hcsAddReg_(ss, row, b) {
   b = b || {};
   if (!b.nameZh || !b.phone || !b.email) return { ok: false, error: '資料不完整' };
   if (!b.receiptDataUrl) return { ok: false, error: '請上傳入數紙截圖。未繳費將不獲處理申請' };
+  /* 公開報名節流（CacheService，全班共用）：防惡意提交塞爆原點帳戶 Drive */
+  var fc = CacheService.getScriptCache();
+  var fk = 'regflood_' + (row.publicCourseId || row.courseId);
+  var fn = Number(fc.get(fk) || 0) + 1;
+  fc.put(fk, String(fn), HUB_REG_FLOOD_SECONDS);
+  if (fn > HUB_REG_FLOOD_MAX) return { ok: false, error: '報名系統繁忙，請 10 分鐘後再試（如大量親友同時報名，請聯絡班職員）' };
   var sh = ss.getSheetByName('表格回應');
   if (!sh) return { ok: false, error: '找不到「表格回應」分頁' };
   var hmap = hcsRespMap_(sh);

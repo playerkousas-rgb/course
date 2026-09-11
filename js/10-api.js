@@ -20,11 +20,18 @@ async function apiCall(action, payload, opts) {
 
   /* 演示模式 → mock 後端（同一合約;起表嘅新班用自己 key） */
   if (course.mock) {
+    let data;
     try {
-      return await MockAPI.call(action, Object.assign({ apiKey: course.key || MOCK_API_KEY }, payload));
+      data = await MockAPI.call(action, Object.assign({ apiKey: course.key || MOCK_API_KEY }, payload));
     } catch (e) {
-      return { ok: false, error: '演示後台錯誤：' + (e && e.message) };
+      return { ok: false, error: '演示後端錯誤：' + (e && e.message) };
     }
+    if (data && data.ok === false && data.mustChangePassword &&
+        typeof UI !== 'undefined' && UI.promptChangePw && !UI._pwPromptOpen) {
+      UI._pwPromptOpen = true;
+      UI.promptChangePw(true, null, () => { UI._pwPromptOpen = false; });
+    }
+    return data;
   }
 
   const body = Object.assign({ action: action }, payload);
@@ -51,6 +58,12 @@ async function apiCall(action, payload, opts) {
     data = await resp.json();
   } catch (e) {
     return { ok: false, error: '後台回應格式不正確——請確認已部署為網頁應用程式（執行身分：我自己；存取：任何人）' };
+  }
+  /* 後端要求首登改密碼（例如 CL 剛開班、或管理員重設咗密碼）→ 即刻彈強制對話框 */
+  if (data && data.ok === false && data.mustChangePassword &&
+      typeof UI !== 'undefined' && UI.promptChangePw && !UI._pwPromptOpen) {
+    UI._pwPromptOpen = true;
+    UI.promptChangePw(true, null, () => { UI._pwPromptOpen = false; });
   }
   return apiNormalizeError(data);
 }
