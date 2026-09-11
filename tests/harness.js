@@ -8,6 +8,9 @@ function makeCtx() {
   const storage = new Map();
   const ctx = {
     console,
+    require,
+    process,
+    Buffer,
     localStorage: {
       getItem: (k) => (storage.has(k) ? storage.get(k) : null),
       setItem: (k, v) => storage.set(k, String(v)),

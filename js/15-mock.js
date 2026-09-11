@@ -199,6 +199,8 @@ function mockSeedState() {
   const st = {
     rev: 0, savedAt: '', by: '',
     sheets: {},
+    /* demo 班＝已運作緊嘅班（CL 一早改咗密碼）；MockDemo.resetPw() 可重設做 1234 試首登流程 */
+    pw: { current: '1234', changed: true },
   };
   st.sheets[TAB.IN1] = IN1; st.sheets[TAB.IN2] = IN2;
   st.sheets[TAB.IN4] = IN4; st.sheets[TAB.RESP] = RESP; st.sheets[TAB.NOTICE] = NOTICE;
@@ -389,6 +391,8 @@ function mockMigrate(state) {
     RESP_HEADERS.forEach((h, i) => { if (!state.sheets[TAB.RESP][0][i]) state.sheets[TAB.RESP][0][i] = h; });
   }
   if (!state.publicCourseId) state.publicCourseId = 'demo-course';
+  /* demo 班視作已改密碼（運作中）；新開班由 mockBlankState 建立、冇 pw＝首登狀態 */
+  if (!state.pw) state.pw = { current: '1234', changed: state.publicCourseId === 'demo-course' };
   if (!state.courseTitle) {
     state.courseTitle = String(shCell(state.sheets[TAB.IN2], 1, 2) || shCell(state.sheets[TAB.IN1], 1, 2) || '攝影專科徽章訓練班');
   }
@@ -489,24 +493,40 @@ function mockCheckBaseRev(state, baseRev) {
 
 /* ── 合約實作（hub 語義：單一 mock /exec＋登記表對應；同 CourseHub.gs） ── */
 /* hub actions：唔使班級 apiKey（入班對應／密碼另驗） */
-const MOCK_HUB_ACTIONS = ['createCourse', 'registerCourse', 'listCourses', 'connectCourseByPassword', 'adminListCourses', 'adminDeleteCourse', 'hubInfo', 'importCourse'];
+const MOCK_HUB_ACTIONS = ['createCourse', 'registerCourse', 'listCourses', 'connectCourseByPassword', 'adminListCourses', 'adminDeleteCourse', 'hubInfo', 'importCourse', 'setParamLabel'];
+/* 區系統密匙（mock 固定值；真後端由 setup 自動產生，存「設定」分頁） */
+const MOCK_OPS_KEY = 'ops_mock_district_key';
+const MOCK_OPS_ACTIONS = ['getCourseProfile', 'getCourseSummary', 'listRegs', 'listBudgetVersions', 'setPaymentCheck', 'setCourseRefund', 'approveBudgetVersion'];
+/* 新班未改預設密碼 1234 前封鎖嘅寫入（同 CourseHub HUB_GATED_WRITES_）；addReg／auth／setPassword 例外 */
+const MOCK_GATED_WRITES = ['saveCourseBatch', 'setCourseCells', 'setRegStatus', 'addExpenseRow', 'setCompletionRow', 'setCertRow', 'setPaymentCheck', 'setCourseRefund', 'sendRegNotice', 'submitBudgetVersion', 'approveBudgetVersion'];
+/* mock 後台帳密（模擬「設定」分頁內已設定嘅值；真值喺 GAS 自動產生） */
+const MOCK_ADMIN_USER = 'sheep';
+const MOCK_ADMIN_PW = '0728';
 
 const MockAPI = {
   call: async function (action, b) {
     await mockDelay();
     b = b || {};
-    /* 對應目標班：優先用 apiKey；addReg 可以只帶 publicCourseId（成員系統 direct link） */
+    /* 對應目標班：優先用 apiKey；addReg 可以只帶 publicCourseId（成員系統 direct link）；
+       區系統 opsKey＋publicCourseId 只通行白名單 action */
     let rk = String(b.apiKey || '');
-    const rkValid = rk === MOCK_API_KEY || !!mockCourses()[rk];
+    const viaOps = !rk && b.opsKey === MOCK_OPS_KEY && MOCK_OPS_ACTIONS.indexOf(action) >= 0;
+    let rkValid = rk === MOCK_API_KEY || !!mockCourses()[rk];
     if (!rkValid && action === 'addReg' && b.publicCourseId) rk = mockKeyByPublicId(b.publicCourseId);
+    if (!rkValid && viaOps && b.publicCourseId) rk = mockKeyByPublicId(b.publicCourseId);
     const isNewCourse = !!(rk && rk !== MOCK_API_KEY && mockCourses()[rk]);
     MOCK_CUR = isNewCourse ? { key: rk, state: mockCourses()[rk] } : { key: null, state: null };
     const state = isNewCourse ? MOCK_CUR.state : mockLoad();
-    const authFail = mockAuth({ apiKey: rk });
+    const authFail = (viaOps || action === 'setParamLabel') ? null : mockAuth({ apiKey: rk });
     if (authFail && action !== 'getCourseProfile' && MOCK_HUB_ACTIONS.indexOf(action) < 0) return authFail;
+    /* 首登強制改密碼：未改 1234 嘅班封鎖寫入（公開 addReg／區系統 ops 唔受影響） */
+    if (!viaOps && action !== 'addReg' && MOCK_GATED_WRITES.indexOf(action) >= 0 &&
+      state && !(state.pw && state.pw.changed)) {
+      return { ok: false, mustChangePassword: true, error: '呢班仲用緊預設密碼 1234——必須先改做班內密碼先可以儲存／批核' };
+    }
     if (action === 'hubInfo') {
       return mockOk({
-        hubVersion: '6.1.0-mock',
+        hubVersion: '6.2.0-mock',
         templateVersion: (typeof HUB_TEMPLATE_VERSION !== 'undefined') ? HUB_TEMPLATE_VERSION : '1.0.0',
         setupAt: '', ready: true,
         courses: { active: mockMetaRows(false).length, archived: 0 },
@@ -579,7 +599,7 @@ const MockAPI = {
     }
     if (action === 'importCourse') {
       /* 舊制班登記入原點（遷移）：保留該班自己嘅 /exec */
-      if (b.adminUser !== 'sheep' || b.adminPassword !== '0728') return mockErr('Unauthorized');
+      if (b.adminUser !== MOCK_ADMIN_USER || b.adminPassword !== MOCK_ADMIN_PW) return mockErr('Unauthorized');
       const fileId = String(b.fileId || b.courseId || '').trim();
       if (!fileId) return mockErr('missing fileId');
       const mreg = mockRegistry();
@@ -598,11 +618,37 @@ const MockAPI = {
       return mockOk({ imported: true, courseId: meta.courseId, publicCourseId: meta.publicCourseId, name: meta.name });
     }
     if (action === 'adminListCourses') {
-      if (b.adminUser !== 'sheep' || b.adminPassword !== '0728') return mockErr('Unauthorized');
-      return mockOk({ courses: mockMetaRows(true) });
+      if (b.adminUser !== MOCK_ADMIN_USER || b.adminPassword !== MOCK_ADMIN_PW) return mockErr('Unauthorized');
+      return mockOk({
+        courses: mockMetaRows(true),
+        /* 交接用密匙（真後端存「設定」分頁；mock 固定值） */
+        secrets: {
+          adminUser: MOCK_ADMIN_USER, adminPassword: MOCK_ADMIN_PW, opsKey: MOCK_OPS_KEY,
+          memberPortalUrl: 'https://member-portal-sigma-swart.vercel.app/training', opsEmail: '',
+          fpsId: '', fpsName: '', districtWeb: '',
+        },
+      });
+    }
+    if (action === 'setParamLabel') {
+      /* 區管理系統專用：tick「區會批准」等參數；必須 opsKey（同 CourseHub.gs 合約） */
+      if (b.opsKey !== MOCK_OPS_KEY) return mockErr('區系統密匙不正確——setParamLabel 只接受區管理系統呼叫');
+      const id = String(b.publicCourseId || b.courseId || b.fileId || '').trim();
+      let key = id ? mockKeyByPublicId(id) : '';
+      if (!key && id && mockRegistry()[id]) key = id;
+      const st0 = key === MOCK_API_KEY ? mockLoad() : (mockCourses()[key] || null);
+      if (!st0) return mockErr('找不到該訓練班');
+      const label = String(b.label || '').trim();
+      if (!label) return mockErr('missing label');
+      const PARAM = st0.sheets[TAB.PARAM];
+      let at = PARAM.findIndex((r) => String(r[0]).trim() === label);
+      if (at < 0) { at = PARAM.length; PARAM.push([label, '']); }
+      PARAM[at][1] = b.value == null ? '' : String(b.value);
+      if (key === MOCK_API_KEY) mockPersist();
+      else { const reg = mockCourses(); reg[key] = st0; mockSaveCourses(reg); }
+      return mockOk({ saved: true, row: at + 1, label: label });
     }
     if (action === 'adminDeleteCourse') {
-      if (b.adminUser !== 'sheep' || b.adminPassword !== '0728') return mockErr('Unauthorized');
+      if (b.adminUser !== MOCK_ADMIN_USER || b.adminPassword !== MOCK_ADMIN_PW) return mockErr('Unauthorized');
       const id = String(b.publicCourseId || b.courseId || b.apiKey || b.key || b.id || '').trim();
       if (id === 'demo-course' || id === MOCK_API_KEY) { mockReset(); return mockOk({ deleted: true, name: '演示訓練班（攝影專章）', trashed: false }); }
       const mreg = mockRegistry();

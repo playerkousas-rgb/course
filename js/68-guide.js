@@ -104,7 +104,7 @@ regPage('guide', function (root) {
   const faq = h('div', { class: 'card' });
   faq.appendChild(h('div', { class: 'card-title' }, '❓ 常見問題'));
   [
-    ['密碼幾多？', '每班首次 1234，入去即刻改（班職員共用一個密碼）。錯 5 次鎖 10 分鐘。忘記密碼搵 ADC 重設。'],
+    ['密碼幾多？', '每班首次 1234，首次登入強制要改（唔改乜都寫唔到；班職員共用一個密碼）。右上角 🔑 可隨時再改、🚪 登出切換班別。錯 5 次鎖 10 分鐘。忘記密碼搵 ADC 用後備管理員重設。'],
     ['幾個職員一齊用得唔得？', '得。所有修改先存本機草稿，撳💾先寫入；同一格兩個人改咗會偵測到衝突，彈窗揀邊個版本。每 15 秒自動同步。'],
     ['撳咗💾話「有人快咗一步」？', '有人啱啱寫入過。系統已幫你重讀最新——再撳一次儲存就得（你嘅草稿仲喺度）。'],
     ['手機用得嗎？', '得，介面係手機先行。最好 add 去主畫面（PWA 風格）當 App 咁用。'],
@@ -125,13 +125,13 @@ regPage('guide', function (root) {
   admin.appendChild(h('div', { class: 'card-title' }, '🏛️ 區管理層／ADC 版重點'));
   admin.appendChild(h('div', { class: 'guide-step' },
     h('div', { class: 'guide-step-body' },
-      '① 訓練班系統原點：用一個專門嘅非機密帳戶開一張 GS → 貼一個檔案（apps-script/CourseHub.gs，見 apps-script/COURSEHUB.md）→ 手動 run 一次 setup()（自動完成訓練班登記等所有設定）→ 部署一次 → 出「訓練班系統 /exec（＋開班碼，可選）」俾 CL；之後每個訓練班自動開一張 Sheet，唔使再部署。登記表只係指針——班 Sheet 可以喺任何帳戶開（「我已有 Sheet，登記就得」），原點只靠逐個檔案 Drive 分享存取，冇人需要交帳戶',
+      '① 訓練班系統原點：用一個專門嘅非機密帳戶開一張 GS → 貼一個檔案（apps-script/CourseHub.gs，見 apps-script/COURSEHUB.md）→ 手動 run 一次 setup()（自動完成訓練班登記等所有設定，並自動產生「區系統密匙」同後台帳密——開一次「設定」分頁抄低）→ 部署一次 → 出「訓練班系統 /exec（＋開班碼，可選）」俾 CL；之後每個訓練班自動開一張 Sheet，唔使再部署。登記表只係指針——班 Sheet 可以喺任何帳戶開（「我已有 Sheet，登記就得」），原點只靠逐個檔案 Drive 分享存取，冇人需要交帳戶',
       h('br'),
-      '② CL 交嚟嘅 GS＋SCRIPT 網址貼入區管理系統自己分頁 → 自動掛載成員系統',
+      '② CL 交嚟嘅 GS 網址貼入區管理系統自己分頁，並將「區系統密匙 opsKey」貼入區系統設定（一次）→ 區系統靠 opsKey＋公開課程ID 對接所有班、自動掛載成員系統；成員報名 addReg 只憑公開課程ID、只寫不讀',
       h('br'),
-      '③ 批核淨係睇一個 API：getCourseSummary（課程資料・節次・職員・預算 8 類・通告檔案編號・訓練班電郵・批准狀態・報名數，一個 call 攞齊）——合約喺 docs/API.md',
+      '③ 批核淨係睇一個 API：getCourseSummary（課程資料・節次・職員・預算 8 類・通告檔案編號・訓練班電郵・批准狀態・報名數，一個 call 攞齊，opsKey 白名單已包）——合約喺 docs/API.md',
       h('br'),
-      '④ 批好 tick「區會批准」格（GS 參數分頁，或經你系統寫入），CL 就會見到 ✔',
+      '④ 批好 tick「區會批准」格：必須經 setParamLabel 帶 opsKey 寫入（人手開 GS 勾都得，但 APP 流程以 API 為準），CL 就會見到 ✔',
       h('br'),
       '⑤ 收款核對：setPaymentCheck API（tick「已核對收款」）；退款：setCourseRefund；Budget 批核：approveBudgetVersion（一批完自動寫回 Input01 更新收支表）；完成後讀「Print_訓練班完成報告」連結成員系統紀錄')));
   admin.appendChild(h('div', { class: 'row-sub' }, (course && course.mock ? '📊 而家喺演示班——上面全部可以試' : '🎓 而家連住真班——小心啲掣係真嘅') + (st && st.info && st.info.name ? '：「' + st.info.name + '」' : '')));
