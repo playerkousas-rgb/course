@@ -328,7 +328,7 @@ function hubEnsureAuthSheet_(ss) {
   /* 保護：只 script／擁有者可改（設警告，唔阻 script 寫入） */
   var prots = sh.getProtections(SpreadsheetApp.ProtectionType.SHEET);
   if (!prots.length) {
-    var p = sh.protect(SpreadsheetApp.ProtectionType.SHEET);
+    var p = sh.protect();
     p.setDescription('訓練班系統密碼／API Key（唔好手改）');
     p.setWarningOnly(true);
   }
