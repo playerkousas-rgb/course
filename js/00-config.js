@@ -41,6 +41,8 @@ const RESP_HEADERS = [
   '審批狀態', '批核人', '批核時間', '_courseId', '_courseTitle', '_section', '_badgeCode', '_ref',
   /* coursev5 新增（AS-AW）：45-47 由區管理系統 setPaymentCheck 寫；48-49 由本 APP 職員收表時寫 */
   '已核對收款', '核對人', '核對時間', '已交表格正本（STA）', '收表記錄',
+  /* coursev5.2 新增（AX-BA）：由區管理系統退款 tick；由訓練班 APP 寄通知書後記錄 */
+  '已退款', '退款核對人', '通知書', '通知書寄出時間',
 ];
 /* 1-based 欄號（對應 saveCourseBatch cells 座標） */
 const RC = {};
@@ -53,6 +55,8 @@ const RC_REVIEWED_AT = RC['批核時間'];
 const RC_STUDENT_NO = RC['學員編號'];    // 公式欄（接納✔後自動編號，唔好寫）
 const RC_GROUP = RC['分組'];             // 職員人手填
 const RC_TROOPNO = RC['旅號'];           // 公式欄（旅團抽數字，唔好寫）
+const RC_REFUNDED = RC['已退款'];
+const RC_REG_NOTICE = RC['通知書'];
 
 /* ── 審批狀態（同區管理平台一致） ── */
 const STATUS_INFO = {

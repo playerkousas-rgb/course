@@ -69,13 +69,15 @@ function fmtShortDate(ymd) {
 
 /* ── 參數 W/X（區會常數） ── */
 function parseParamsWX(pw) {
-  const out = { portalUrl: '', fpsId: '', fpsName: '', districtWeb: '', approved: false, courseEmail: '' };
+  const out = { portalUrl: '', directRegUrl: '', publicCourseId: '', fpsId: '', fpsName: '', districtWeb: '', approved: false, courseEmail: '' };
   if (!Array.isArray(pw)) return out;
   for (let i = 0; i < pw.length; i++) {
     const row = pw[i] || [];
     const w = String(row[0] == null ? '' : row[0]).trim();
     const x = String(row[1] == null ? '' : row[1]).trim();
-    if (w.indexOf('成員系統') >= 0) out.portalUrl = x;
+    if (w.indexOf('直接報名連結') >= 0) out.directRegUrl = x;
+    else if (w.indexOf('公開課程ID') >= 0 || w.indexOf('公開課程 Id') >= 0 || w.indexOf('Public Course ID') >= 0) out.publicCourseId = x;
+    else if (w.indexOf('成員系統') >= 0) out.portalUrl = x;
     else if (w.indexOf('FPS 識別碼') >= 0) out.fpsId = x;
     else if (w.indexOf('FPS 戶口') >= 0) out.fpsName = x;
     else if (w.indexOf('區會網址') >= 0) out.districtWeb = x;
@@ -85,6 +87,15 @@ function parseParamsWX(pw) {
     else if (w.indexOf('訓練班電郵') >= 0) out.courseEmail = x;
   }
   return out;
+}
+
+
+function buildDirectRegUrl(base, publicCourseId) {
+  base = String(base || '').trim();
+  publicCourseId = String(publicCourseId || '').trim();
+  if (!base || !publicCourseId) return base;
+  if (base.indexOf('courseId=') >= 0 || base.indexOf('/register') >= 0) return base;
+  return base + (base.indexOf('?') >= 0 ? '&' : '?') + 'courseId=' + encodeURIComponent(publicCourseId);
 }
 
 /* ── Input02 節次（列 9–16） ── */
@@ -182,6 +193,11 @@ function parseRegs(resp) {
     o.pcAt = String(o['核對時間'] || '').trim();
     o.sta = String(o['已交表格正本（STA）'] || '').trim() === '✔';   // 職員收表（報名表正本）
     o.staNote = String(o['收表記錄'] || '').trim();
+    o.refunded = String(o['已退款'] || '').trim() === '✔';
+    o.refundBy = String(o['退款核對人'] || '').trim();
+    o.noticeKind = String(o['通知書'] || '').trim();
+    o.noticeAt = String(o['通知書寄出時間'] || '').trim();
+    o.noticeSent = !!(o.noticeKind || o.noticeAt);
     out.push(o);
   }
   return out;
@@ -212,6 +228,9 @@ function regStats(regs, quota) {
       if (r.group) s.groupsInUse = true;
       else s.ungrouped = (s.ungrouped || 0) + 1;
     }
+    if ((r.status === 'rejected' || r.status === 'cancelled') && r.refunded) s.refunded = (s.refunded || 0) + 1;
+    if ((r.status === 'approved' || r.status === 'rejected') && !r.noticeSent) s.noticePending = (s.noticePending || 0) + 1;
+    if (r.noticeSent) s.noticeSent = (s.noticeSent || 0) + 1;
     if (r.status === 'pending' && !r.pcheck) s.pendingUnpaid = (s.pendingUnpaid || 0) + 1;
   });
   s.quota = Number(quota) || 0;
@@ -274,7 +293,8 @@ function composeNoticeDoc(get, params) {
 
   const fpsId = params.fpsId || '（未設定）';
   const fpsName = params.fpsName || '';
-  const portalUrl = params.portalUrl || '';
+  const portalUrl = (params && params.portalUrl) || '';
+  const directRegUrl = (params && params.directRegUrl) || buildDirectRegUrl(portalUrl, params && params.publicCourseId);
 
   return {
     title: name,
@@ -287,7 +307,7 @@ function composeNoticeDoc(get, params) {
       '（可掃瞄通告下方QR Code，備註欄請註明【' + name + '】及【參加者姓名】）。（如未能取錄，報名費用將會悉數退回）',
     quotaText: quota ? quota + '人' : '',
     deadlineText: deadline ? fmtCNDate(deadline) : '',
-    signupText: '請於筲箕灣區成員系統訓練班版面填妥網上報名表（網址：' + portalUrl + '）',
+    signupText: '請於筲箕灣區成員系統直接報名連結填妥網上報名表（網址：' + (directRegUrl || portalUrl || '（待區管理系統掛載後提供）') + '）',
     uniform: edits.uniform,
     remarks: [edits.remark1, edits.remark2, edits.remark3, edits.remark4, edits.remark5, edits.remark6].filter(x => x),
     enquiry: '如在' + (deadline ? fmtCNDate(deadline) : '截止日期') +
@@ -388,7 +408,7 @@ function mountStatus(st) {
     phase: phase, approved: approved, regCount: regCount,
     gsUrl: (course && course.gsUrl) || '',
     scriptUrl: (course && course.exec && !course.mock) ? course.exec : '',
-    portalUrl: (st && st.params && st.params.portalUrl) || '',
+    portalUrl: (st && st.params && (st.params.directRegUrl || st.params.portalUrl)) || '',
   };
 }
 

@@ -149,6 +149,32 @@ async function main() {
   pcRaw = await MockAPI.call('getCourseSheetRaw', { apiKey: KEY });
   ok(pcRaw.data.rev === pcRev, 'setPaymentCheck 唔 bump rev（同 GAS 語義一致）');
 
+  /* ══ sendRegNotice 收生通知書（訓練班系統寄；演示寫 AZ/BA） ══ */
+  section('sendRegNotice 收生通知書');
+  const rn = await MockAPI.call('sendRegNotice', { apiKey: KEY, ids: [pcId], by: '陳大文' });
+  ok(rn.ok && rn.data.sent === 1, '已寄一封通知書');
+  const rnRaw = (await MockAPI.call('getCourseSheetRaw', { apiKey: KEY })).data;
+  ok(rnRaw.resp[1][RC['通知書'] - 1] === 'accepted' && rnRaw.resp[1][RC['通知書寄出時間'] - 1], 'AZ/BA 已寫通知書紀錄');
+  const rn2 = await MockAPI.call('sendRegNotice', { apiKey: KEY, ids: [pcId], by: '陳大文' });
+  ok(rn2.ok && rn2.data.skipped === 1, '已寄過會略過，防重寄');
+
+  /* ══ Budget V1/V2（提交→批核→寫回 Input01） ══ */
+  section('Budget V1/V2 批核');
+  MockDemo.reset();
+  const bv1 = await MockAPI.call('submitBudgetVersion', { apiKey: KEY, reason: '開班前初版預算', by: '陳大文' });
+  ok(bv1.ok && bv1.data.version === 1, '提交 Budget V1');
+  const ba1 = await MockAPI.call('approveBudgetVersion', { apiKey: KEY, version: 1, by: 'DDC(T)' });
+  ok(ba1.ok && ba1.data.appliedToInput01, '批准 V1 並寫回 Input01');
+  await MockAPI.call('saveCourseBatch', { apiKey: KEY, cells: [{ tab: TAB.IN1, row: 11, col: 2, value: 36 }], by: '陳大文' });
+  const bv2 = await MockAPI.call('submitBudgetVersion', { apiKey: KEY, reason: '收生後按實際人數修訂', by: '陳大文' });
+  ok(bv2.ok && bv2.data.version === 2, '提交 Budget V2');
+  const ba2 = await MockAPI.call('approveBudgetVersion', { apiKey: KEY, version: 2, by: 'DDC(T)' });
+  ok(ba2.ok, '批准 V2');
+  const bl = await MockAPI.call('listBudgetVersions', { apiKey: KEY });
+  ok(bl.ok && bl.data.currentApproved.version === 2 && bl.data.versions.filter(v => v.status === 'superseded').length === 1, 'V2 取代 V1');
+  const br = (await MockAPI.call('getCourseSheetRaw', { apiKey: KEY })).data;
+  ok(Number(br.input01[10][1]) === 36, 'V2 批完 Input01 已更新，收支表會跟新預算');
+
   /* ══ setCompletionRow / setCertRow（完成評核＋領取證書） ══ */
   section('setCompletionRow 完成評核');
   MockDemo.reset();
@@ -186,6 +212,7 @@ async function main() {
   const fc = await MockAPI.call('createCourse', { courseName: '遠足專章訓練班', clName: '陳大文' });
   const FK = fc.data.apiKey;
   ok(fc.ok && /docs\.google\.com/.test(fc.data.url || ''), '即刻起表回傳 GS URL（交區管理系統連結批核）');
+  ok(fc.data.publicCourseId && (fc.data.directRegUrl || '').indexOf('courseId=') >= 0, '回傳成員系統 direct 報名 courseId（唔係 Script /exec）');
   /* CL 填寫中——參數分頁批准格未 tick */
   let fRaw = (await MockAPI.call('getCourseSheetRaw', { apiKey: FK })).data;
   ok(fRaw.paramsWX.some((r) => r[0] === '區會批准' && r[1] === ''), '新班「區會批准」未 tick');

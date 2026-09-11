@@ -160,26 +160,37 @@ const UI = {
       }
     }
 
-    const savedList = Store.courses().length
+    const activeCourses = Store.courses().filter(c => !c.archived && !c.archivedAt);
+    const archivedCourses = Store.courses().filter(c => c.archived || c.archivedAt);
+    const courseRow = (c, archived) => h('div', { class: 'row-item' },
+      h('div', { class: 'row-main' },
+        h('div', { class: 'row-title' }, (c.mock ? '📊 ' : (archived ? '📦 ' : '🎓 ')) + c.name),
+        h('div', { class: 'row-sub' }, archived ? ('已完成' + (c.archivedAt ? '・' + fmtDT(c.archivedAt) : '')) : (c.mock ? '演示模式' : c.exec.slice(0, 52) + '…'))),
+      archived
+        ? h('button', { class: 'btn btn-sm', onclick: () => { Store.archiveCourse(c.id, false); Store.setActive(c.id); UI.render(); } }, '重新開啟')
+        : h('button', { class: 'btn btn-sm', onclick: () => { Store.setActive(c.id); UI.render(); } }, '開啟'),
+      h('button', { class: 'btn btn-sm btn-ghost', onclick: async () => {
+        if (await confirmDlg('刪除連線', '刪除「' + c.name + '」連線記錄？（本機草稿都會刪，Sheet 資料唔受影響）', { danger: true, okText: '刪除' })) {
+          Store.removeCourse(c.id); UI.render();
+        }
+      } }, '🗑'));
+    const savedList = (activeCourses.length || archivedCourses.length)
       ? h('div', { class: 'card' },
           h('div', { class: 'card-title' }, '已連線嘅訓練班'),
-          Store.courses().map(c => h('div', { class: 'row-item' },
-            h('div', { class: 'row-main' },
-              h('div', { class: 'row-title' }, (c.mock ? '📊 ' : '🎓 ') + c.name),
-              h('div', { class: 'row-sub' }, c.mock ? '演示模式' : c.exec.slice(0, 52) + '…')),
-            h('button', { class: 'btn btn-sm', onclick: () => { Store.setActive(c.id); UI.render(); } }, '開啟'),
-            h('button', { class: 'btn btn-sm btn-ghost', onclick: async () => {
-              if (await confirmDlg('刪除連線', '刪除「' + c.name + '」連線記錄？（本機草稿都會刪，Sheet 資料唔受影響）', { danger: true, okText: '刪除' })) {
-                Store.removeCourse(c.id); UI.render();
-              }
-            } }, '🗑'))))
+          activeCourses.length ? activeCourses.map(c => courseRow(c, false)) : h('div', { class: 'row-sub' }, '未有進行中訓練班'),
+          archivedCourses.length ? h('div', { class: 'card-in' },
+            h('div', { class: 'card-title' }, '📦 已完成訓練班'),
+            archivedCourses.map(c => courseRow(c, true))) : null)
       : null;
 
     app.appendChild(h('div', { class: 'screen-center' },
       h('div', { class: 'brand-block' },
-        h('div', { class: 'brand-icon' }, '🎓'),
+        h('div', { class: 'brand-icon', onclick: () => { UI._adminClicks = (UI._adminClicks || 0) + 1; if (UI._adminClicks >= 7) { UI._adminClicks = 0; UI.showFactoryAdmin(); } } }, '🎓'),
         h('h1', { class: 'brand-title' }, APP_INFO.name),
         h('div', { class: 'brand-sub' }, '開班文件 → 通告 → 收生 → 點名收支（一條龍）')),
+      h('div', { class: 'card' },
+        h('div', { class: 'card-title' }, '🔎 我點樣讀返自己嗰班？'),
+        h('div', { class: 'row-sub' }, '呢個係共用前端，同一個網址可以服務 A/B/C 幾個訓練班。每班真正資料喺自己一張 Google Sheet＋一個 Apps Script。CL 起表後，系統會保存該班 /exec＋API Key 喺本機；其他職員用「複製職員連結」一撳就自動加入同一班。幾班同時進行時，下面「已連線嘅訓練班」揀返要開嗰班就得。')),
       h('div', { class: 'card' },
         h('div', { class: 'card-title' }, '連線去訓練班工作簿'),
         h('div', { class: 'field' }, h('label', { class: 'flabel' }, '/exec 網址（Apps Script 網頁應用程式）'), execIn),
@@ -191,11 +202,58 @@ const UI = {
           h('button', { class: 'btn', onclick: () => doConnect(true) }, '📊 演示模式'))),
       this.renderNewCourse(),
       savedList,
-      h('div', { class: 'foot-note' }, '共職員密碼預設 1234（進入後可改）・純前端，資料直接同每班 Google Sheet 對話')));
+      h('div', { class: 'foot-note' }, '共職員密碼預設 1234（進入後可改）・共用前端，資料直接同每班 Google Sheet／Script 對話')));
+  },
+
+  /* ── 隱藏 CourseFactory 後台：清理開錯班（首頁 Logo 連按 7 下） ── */
+  showFactoryAdmin: function () {
+    const fxIn = h('input', { class: 'input', type: 'url', placeholder: 'CourseFactory /exec', value: (Store.config && Store.config.factoryExec) || '' });
+    const userIn = h('input', { class: 'input', type: 'text', placeholder: '後台帳號', autocomplete: 'off' });
+    const pwIn = h('input', { class: 'input', type: 'password', placeholder: '後台密碼', autocomplete: 'off' });
+    const list = h('div', { class: 'card-in' }, h('div', { class: 'row-sub' }, '登入後可刪除開錯嘅訓練班登記；可同時將該 GS 移到 Drive 垃圾桶。'));
+    const msg = h('div', { class: 'form-msg' });
+    let creds = null;
+    async function loadList() {
+      const fx = fxIn.value.trim();
+      if (!fx) { msg.textContent = '請填 CourseFactory /exec。'; msg.className = 'form-msg err'; return; }
+      creds = { adminUser: userIn.value.trim(), adminPassword: pwIn.value };
+      msg.textContent = '讀取中…'; msg.className = 'form-msg';
+      const res = await apiCall('adminListCourses', creds, { exec: fx, key: '' });
+      if (!res || !res.ok) { msg.textContent = '登入／讀取失敗：' + ((res && res.error) || '未知錯誤'); msg.className = 'form-msg err'; return; }
+      Store.config.factoryExec = fx; Store.saveConfig();
+      const courses = (res.data && res.data.courses) || [];
+      list.innerHTML = '';
+      if (!courses.length) list.appendChild(h('div', { class: 'row-sub' }, '未有訓練班登記。'));
+      courses.forEach(c => {
+        const trash = h('input', { type: 'checkbox', checked: 'checked' });
+        list.appendChild(h('div', { class: 'row-item' },
+          h('div', { class: 'row-main' },
+            h('div', { class: 'row-title' }, esc(c.name || c.courseName || '未命名訓練班')),
+            h('div', { class: 'row-sub' }, 'CL：' + esc(c.cl || '—') + (c.createdAt ? '・' + fmtDT(c.createdAt) : '') + (c.publicCourseId ? '・' + esc(c.publicCourseId) : '')),
+            h('label', { class: 'row-sub' }, trash, ' 同時將 GS 移到垃圾桶')),
+          h('button', { class: 'btn btn-sm btn-danger', onclick: async () => {
+            if (!(await confirmDlg('刪除開錯班', '確定刪除「' + (c.name || c.courseName || '未命名訓練班') + '」？\n\n會從訓練班登記表移除；如剔選，該 GS 亦會移到 Drive 垃圾桶。', { danger: true, okText: '刪除' }))) return;
+            const del = await apiCall('adminDeleteCourse', Object.assign({}, creds, { apiKey: c.apiKey || c.key, publicCourseId: c.publicCourseId, courseId: c.courseId, trashFile: trash.checked }), { exec: fx, key: '' });
+            if (del && del.ok) { toast('✅ 已刪除：' + (c.name || c.courseName), 'ok'); loadList(); }
+            else toast('❌ 刪除失敗：' + ((del && del.error) || '未知錯誤'), 'err');
+          } }, '刪除')));
+      });
+      msg.textContent = '已登入'; msg.className = 'form-msg ok';
+    }
+    const m = modal({ title: '後台清理', wide: true, body: h('div', {},
+      h('div', { class: 'field' }, h('label', { class: 'flabel' }, 'CourseFactory /exec'), fxIn),
+      h('div', { class: 'grid-2c' },
+        h('div', { class: 'field' }, h('label', { class: 'flabel' }, '帳號'), userIn),
+        h('div', { class: 'field' }, h('label', { class: 'flabel' }, '密碼'), pwIn)),
+      msg, list), actions: [
+      h('button', { class: 'btn', onclick: loadList }, '登入／重新整理'),
+      h('button', { class: 'btn btn-ghost', onclick: () => m.close() }, '關閉')
+    ] });
+    pwIn.addEventListener('keydown', e => { if (e.key === 'Enter') loadList(); });
   },
 
   /* ── 🆕 新開班（CL 起表:即刻起真 GS,區管理系統攞 URL 連結批核） ── */
-  renderNewCourse: function () {
+  renderNewCourse: function () { 
     const card = h('div', { class: 'card' });
     card.appendChild(h('div', { class: 'card-title' }, '🆕 新開班（CL 起表）'));
     card.appendChild(h('div', { class: 'row-sub' },
@@ -211,7 +269,7 @@ const UI = {
     const feeIn = h('input', { class: 'input', type: 'number', placeholder: '預計收費（元，可選）' });
     const clIn = h('input', { class: 'input', type: 'text', placeholder: '班領導人姓名（可選，建議填）' });
     const factoryIn = h('input', { class: 'input', type: 'url', placeholder: 'https://script.google.com/macros/s/…/exec（區會 CourseFactory 網址）', value: (Store.config.factoryExec || '') });
-    const masterIn = h('input', { class: 'input', type: 'text', placeholder: '區會開班碼（向 ADC／區管理層攞）', value: (Store.config.factoryKey || '') });
+    const masterIn = h('input', { class: 'input', type: 'text', placeholder: '管理碼（可選；只用於從登記表直接取回連線資料）', value: (Store.config.factoryKey || '') });
     const msg = h('div', { class: 'form-msg' });
 
     async function doCreate(mockMode) {
@@ -228,7 +286,7 @@ const UI = {
         catch (e) { res = { ok: false, error: '演示後台錯誤：' + (e && e.message) }; }
       } else {
         const fx = factoryIn.value.trim(), mk = masterIn.value.trim();
-        if (!fx || !mk) { msg.textContent = '請填區會開班網址同開班碼（向區管理層攞）。'; msg.className = 'form-msg err'; return; }
+        if (!fx) { msg.textContent = '請填區會開班網址（CourseFactory /exec）。'; msg.className = 'form-msg err'; return; }
         Store.config.factoryExec = fx; Store.config.factoryKey = mk; Store.saveConfig();
         payload.masterKey = mk;
         res = await apiCall('createCourse', payload, { exec: fx, key: mk });
@@ -236,12 +294,66 @@ const UI = {
       if (!res || !res.ok) { msg.textContent = '起表失敗：' + ((res && res.error) || '未知錯誤'); msg.className = 'form-msg err'; return; }
       const d = res.data;
       const id = mockMode
-        ? Store.addCourse({ mock: true, id: d.apiKey, key: d.apiKey, name: nm, gsUrl: d.url || '', fresh: true })
-        : Store.addCourse({ exec: d.exec, key: d.apiKey, name: nm, gsUrl: d.url || '', fresh: true });
+        ? Store.addCourse({ mock: true, id: d.apiKey, key: d.apiKey, name: nm, gsUrl: d.url || '', directRegUrl: d.directRegUrl || '', publicCourseId: d.publicCourseId || '', fresh: true })
+        : Store.addCourse({ exec: d.exec, key: d.apiKey, name: nm, gsUrl: d.url || '', directRegUrl: d.directRegUrl || '', publicCourseId: d.publicCourseId || '', fresh: true });
       Store.setActive(id);
       toast('✅ GS 已起「' + nm + '」——首次密碼 1234，入去先改密碼，之後複製 GS 網址交區管理系統批核', 'ok');
       UI.render();
       if (d.url) showGsUrlModal(d.url);
+    }
+
+    async function doPickRegistered(mockMode) {
+      const fx = factoryIn.value.trim(), mk = masterIn.value.trim();
+      if (!mockMode && !fx) { msg.textContent = '請填區會開班網址，先可以讀訓練班登記表。'; msg.className = 'form-msg err'; return; }
+      Store.config.factoryExec = fx; Store.config.factoryKey = mk; Store.saveConfig();
+      msg.textContent = '讀取訓練班登記表中…'; msg.className = 'form-msg';
+      const res = mockMode
+        ? await MockAPI.call('listCourses', {})
+        : await apiCall('listCourses', { masterKey: mk }, { exec: fx, key: mk });
+      if (!res || !res.ok) { msg.textContent = '讀取失敗：' + ((res && res.error) || '未知錯誤'); msg.className = 'form-msg err'; return; }
+      const courses = ((res.data && res.data.courses) || []).filter(c => c && (c.name || c.courseName));
+      if (!courses.length) { msg.textContent = '登記表暫時未有訓練班。'; msg.className = 'form-msg warn'; return; }
+      let m;
+      async function openPicked(c) {
+        if ((c.exec || c.scriptExecUrl) && (c.apiKey || c.key)) {
+          const id = Store.addCourse({ exec: c.exec || c.scriptExecUrl, key: c.apiKey || c.key, name: c.name || c.courseName, gsUrl: c.gsUrl || c.url || '', directRegUrl: c.directRegUrl || '', publicCourseId: c.publicCourseId || '' });
+          Store.setActive(id); m.close(); toast('✅ 已選擇：' + (c.name || c.courseName), 'ok'); UI.render();
+          return;
+        }
+        const pw = h('input', { class: 'input', type: 'password', placeholder: '輸入本班共用密碼', autocomplete: 'off' });
+        const em = h('div', { class: 'form-msg' });
+        let m2;
+        const go = async () => {
+          const password = pw.value;
+          if (!password) { em.textContent = '請輸入本班密碼。'; em.className = 'form-msg err'; return; }
+          em.textContent = '驗證中…'; em.className = 'form-msg';
+          const rr = mockMode
+            ? await MockAPI.call('connectCourseByPassword', { publicCourseId: c.publicCourseId || c.courseId || c.id, password: password })
+            : await apiCall('connectCourseByPassword', { publicCourseId: c.publicCourseId || c.courseId || c.id, password: password }, { exec: fx, key: mk });
+          if (rr && rr.ok && rr.data) {
+            const d = rr.data;
+            const id = Store.addCourse({ exec: d.exec || d.scriptExecUrl, key: d.apiKey || d.key, name: d.name || d.courseName, gsUrl: d.gsUrl || d.url || '', directRegUrl: d.directRegUrl || '', publicCourseId: d.publicCourseId || '' });
+            Store.setActive(id); m2.close(); m.close(); toast('✅ 已進入：' + (d.name || d.courseName), 'ok'); UI.render();
+          } else {
+            em.textContent = (rr && rr.error) || '密碼不正確／連線失敗'; em.className = 'form-msg err';
+          }
+        };
+        m2 = modal({ title: '🔐 ' + (c.name || c.courseName), body: h('div', {},
+          h('div', { class: 'row-sub' }, '不用記 courseId 或 Script URL；輸入本班密碼後，系統會自動取回該班連線資料。'),
+          h('div', { class: 'field' }, pw), em), actions: [
+          h('button', { class: 'btn btn-ghost', onclick: () => m2.close() }, '取消'),
+          h('button', { class: 'btn btn-primary', onclick: go }, '進入')
+        ] });
+        pw.addEventListener('keydown', e => { if (e.key === 'Enter') go(); });
+        setTimeout(() => pw.focus(), 50);
+      }
+      const list = h('div', {}, courses.map(c => h('div', { class: 'row-item' },
+        h('div', { class: 'row-main' },
+          h('div', { class: 'row-title' }, esc(c.name || c.courseName || '未命名訓練班')),
+          h('div', { class: 'row-sub' }, 'CL：' + esc(c.cl || '—') + (c.status ? '・' + esc(c.status) : '') + (c.publicCourseId ? '・ID ' + esc(c.publicCourseId) : ''))),
+        h('button', { class: 'btn btn-sm', onclick: () => openPicked(c) }, (c.exec || c.scriptExecUrl) && (c.apiKey || c.key) ? '開啟' : '輸入密碼'))));
+      m = modal({ title: '📚 從訓練班登記表選擇', wide: true, body: list });
+      msg.textContent = ''; msg.className = 'form-msg';
     }
 
     card.appendChild(h('div', { class: 'grid-2c' },
@@ -252,12 +364,13 @@ const UI = {
       h('div', { class: 'field' }, h('label', { class: 'flabel' }, '預計收生人數'), intakeIn),
       h('div', { class: 'field' }, h('label', { class: 'flabel' }, '預計收費（元）'), feeIn),
       h('div', { class: 'field' }, h('label', { class: 'flabel' }, '班領導人姓名'), clIn)));
-    card.appendChild(h('div', { class: 'field' }, h('label', { class: 'flabel' }, '區會開班網址（CourseFactory /exec）＋開班碼——連區會起表先要填；演示唔使'), factoryIn));
-    card.appendChild(h('div', { class: 'field' }, h('label', { class: 'flabel' }, '開班碼'), masterIn));
+    card.appendChild(h('div', { class: 'field' }, h('label', { class: 'flabel' }, '區會開班網址（CourseFactory /exec）——新開班只需填呢個；演示唔使'), factoryIn));
+    card.appendChild(h('div', { class: 'field' }, h('label', { class: 'flabel' }, '管理碼（選已有班才需要；避免公開登記表洩漏 API Key）'), masterIn));
     card.appendChild(msg);
     card.appendChild(h('div', { class: 'btn-row' },
       h('button', { class: 'btn btn-primary', onclick: () => doCreate(true) }, '🚀 起表（演示）'),
-      h('button', { class: 'btn', onclick: () => doCreate(false) }, '🏛 連區會起表（即刻開真 GS）')));
+      h('button', { class: 'btn', onclick: () => doCreate(false) }, '🏛 連區會起表（即刻開真 GS）'),
+      h('button', { class: 'btn btn-ghost', onclick: () => doPickRegistered(false) }, '📚 從登記表選班')));
     return card;
   },
 
@@ -349,7 +462,7 @@ const UI = {
 
     app.appendChild(h('div', { class: 'screen-center' },
       h('div', { class: 'card lock-card' },
-        h('div', { class: 'brand-icon' }, '🎓'),
+        h('div', { class: 'brand-icon', onclick: () => { UI._adminClicks = (UI._adminClicks || 0) + 1; if (UI._adminClicks >= 7) { UI._adminClicks = 0; UI.showFactoryAdmin(); } } }, '🎓'),
         h('h2', { class: 'lock-title' }, course.name || APP_INFO.name),
         h('div', { class: 'lock-sub' }, '班職員共用入口 — 輸入密碼後揀自己個名'),
         h('div', { class: 'field' }, h('label', { class: 'flabel' }, '密碼'), pwIn),
@@ -613,6 +726,11 @@ const UI = {
       h('div', { class: 'btn-row', style: { marginTop: '12px' } },
         h('button', { class: 'btn btn-ghost', onclick: () => { Store.lock(); Sync.stop(); UI.render(); } }, '🔒 鎖定'),
         h('button', { class: 'btn btn-ghost', onclick: () => { Store.config.activeId = null; Store.saveConfig(); Store.lock(); Sync.stop(); UI.render(); } }, '🔁 切換訓練班'),
+        h('button', { class: 'btn btn-ghost', onclick: async () => {
+          if (await confirmDlg('標記訓練班已完成', '完成訓練班後可將本機連線標記已完成，主清單就唔會越嚟越長。只係標記已完成呢部機嘅連線記錄，Google Sheet／區管理系統資料唔會受影響；之後可喺「已完成／已完成」重新開啟。', { okText: '標記已完成' })) {
+            Store.archiveCourse(course.id, true); Store.lock(); Sync.stop(); m.close(); UI.render();
+          }
+        } }, '📦 標記已完成'),
         h('button', { class: 'btn btn-ghost', onclick: () => m.close() }, '關閉')));
 
     const m = modal({ title: '⚙️ 設定', wide: true, body: body });

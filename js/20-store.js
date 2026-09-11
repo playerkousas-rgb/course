@@ -47,12 +47,24 @@ const Store = {
       existing.exec = o.exec || existing.exec;
       existing.key = o.key || existing.key;
       existing.gsUrl = o.gsUrl || existing.gsUrl;
+      existing.directRegUrl = o.directRegUrl || existing.directRegUrl;
+      existing.publicCourseId = o.publicCourseId || existing.publicCourseId;
     } else {
-      this.config.courses.push({ id: id, name: o.name || '未命名訓練班', exec: o.exec || '', key: o.key || '', gsUrl: o.gsUrl || '', mock: !!o.mock, fresh: !!o.fresh, savedAt: new Date().toISOString() });
+      this.config.courses.push({ id: id, name: o.name || '未命名訓練班', exec: o.exec || '', key: o.key || '', gsUrl: o.gsUrl || '', directRegUrl: o.directRegUrl || '', publicCourseId: o.publicCourseId || '', mock: !!o.mock, fresh: !!o.fresh, savedAt: new Date().toISOString() });
     }
     this.saveConfig();
     return id;
   },
+
+  archiveCourse: function (id, archived) {
+    const c = this.courses().filter(x => x.id === id)[0];
+    if (!c) return false;
+    if (archived === false) { delete c.archivedAt; c.archived = false; }
+    else { c.archived = true; c.archivedAt = new Date().toISOString(); if (this.config.activeId === id) this.config.activeId = null; }
+    this.saveConfig();
+    return true;
+  },
+
   removeCourse: function (id) {
     this.config.courses = this.courses().filter(c => c.id !== id);
     if (this.config.activeId === id) this.config.activeId = this.courses()[0] ? this.courses()[0].id : null;

@@ -16,7 +16,7 @@
  *************************************************************/
 
 var SM5 = {
-  IN1: 'Input01 預算', IN2: 'Input02 班資料', NOTICE: 'Print_通告', PARAM: '參數', RESP: '表格回應',
+  IN1: 'Input01 預算', IN1_ALT: 'Input01 訓練班預算', IN2: 'Input02 班資料', IN2_ALT: 'Input02 訓練班資料', NOTICE: 'Print_通告', PARAM: '參數', RESP: '表格回應',
   IN1_NAME: [1, 2], IN1_EDITION: [4, 2], IN1_SECTION: [5, 2], IN1_BADGE: [6, 2],
   IN1_CUSTOM: [7, 2], IN1_TYPE1: [8, 2], IN1_TYPE2: [9, 2],
   IN1_INTAKE: [11, 2], IN1_FEE: [12, 2], IN1_STAFF: [13, 2],
@@ -43,8 +43,8 @@ var SM5 = {
 
 function doGetCourseSummary_(msg) {
   var ss = SpreadsheetApp.getActive();
-  var in1 = ss.getSheetByName(SM5.IN1);
-  var in2 = ss.getSheetByName(SM5.IN2);
+  var in1 = ss.getSheetByName(SM5.IN1) || ss.getSheetByName(SM5.IN1_ALT);
+  var in2 = ss.getSheetByName(SM5.IN2) || ss.getSheetByName(SM5.IN2_ALT);
   if (!in1 || !in2) return sm5Out_({ ok: false, error: '找不到 Input01/Input02 分頁' });
 
   var g1 = in1.getRange(1, 1, Math.max(in1.getLastRow(), 120), 10).getValues();

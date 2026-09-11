@@ -45,6 +45,7 @@ const resp = [RESP_HEADERS.slice()];
   r[RC['旅號'] - 1] = '82';   /* GAS dump 回公式計算值 */
   r[RC['已核對收款'] - 1] = '✔'; r[RC['核對人'] - 1] = '區會財務'; r[RC['核對時間'] - 1] = '2026-09-26T01:00:00.000Z';
   r[RC['已交表格正本（STA）'] - 1] = '✔'; r[RC['收表記錄'] - 1] = '陳大文 2026-10-17 19:35';
+  r[RC['通知書'] - 1] = 'accepted'; r[RC['通知書寄出時間'] - 1] = '2026-10-08T01:00:00.000Z';
   r[RC['審批狀態'] - 1] = 'approved';
   r[RC['學員編號'] - 1] = 1;
   r[RC['分組'] - 1] = '第一組';
@@ -101,6 +102,7 @@ const raw = {
     ['區會批准', '✔'],
     ['訓練班電郵', 'course.test@skwscout.org.hk'],
     ['成員系統報名網址', 'https://portal.test/training'],
+    ['公開課程ID', 'crs_test_001'],
     ['FPS 識別碼', '102866183'],
     ['FPS 戶口名稱', 'SAHK SKW'],
     ['區會網址', 'www.skwscout.org.hk'],
@@ -126,6 +128,7 @@ eq(p.regs[0].troopNo, '82', '旅號（公式值）');
 ok(p.regs[0].pcheck, '已核對收款 ✔');
 ok(p.regs[0].pcBy === '區會財務', '核對人');
 ok(p.regs[0].sta, 'STA 正本已交');
+ok(p.regs[0].noticeSent && p.regs[0].noticeKind === 'accepted', '通知書紀錄已讀 AZ/BA');
 ok(p.regs[1].pcheck === false, '第二筆未核對收款 → false');
 section('掛載狀態 parseParamsWX');
 ok(p.params.approved === true, '區會批准 ✔');
@@ -169,7 +172,7 @@ eq(doc.deadlineText, '2026年10月5日（星期一）', '截止中文');
 eq(doc.sessions.length, 1, '通告只列 ✓上通告 嘅節次');
 eq(doc.sessions[0].date, '2026年10月17日（星期六）', '通告顯示日期');
 ok(doc.payText.indexOf('102866183') >= 0, 'FPS 識別碼入文');
-ok(doc.signupText.indexOf('https://portal.test/training') >= 0, '成員系統網址入文');
+ok(doc.signupText.indexOf('https://portal.test/training?courseId=crs_test_001') >= 0, '成員系統 direct 報名連結入文');
 eq(doc.leaderText, '陳大文先生（木章）', '班領導人行');
 ok(doc.enquiry.indexOf('course.test@skwscout.org.hk') >= 0, '查詢行用訓練班電郵（管理層告知）優先');
 ok(doc.enquiry.indexOf('d@x.hk') < 0, '有訓練班電郵就唔用班領導人電郵');

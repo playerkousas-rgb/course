@@ -38,6 +38,21 @@ function financeSummary(st) {
 let _finBusy = false;
 
 /* 新增支出（addExpenseRow：append-only，唔檢查 rev，唔會撞其他職員） */
+async function submitBudgetForApproval() {
+  const st = Store.state;
+  if (!st) return;
+  const reason = prompt('提交 Budget 版本俾管理層批核\n\nV1＝開班前初版；V2+＝通常收生後因人數太多／太少而修改。請簡單寫明原因：', st.stats && st.stats.total ? '收生後按實際人數修訂' : '開班前初版預算');
+  if (reason == null) return;
+  const res = await apiCall('submitBudgetVersion', { reason: reason, by: Store.staffName() || '' });
+  if (res && res.ok) {
+    const v = res.data && res.data.version;
+    toast('✅ Budget V' + v + ' 已提交管理層批核；批完會自動更新正式收支表', 'ok');
+    Store.pushLog('budget', '提交 Budget V' + v + '：' + reason);
+  } else {
+    toast('❌ 提交 Budget 失敗：' + ((res && res.error) || '未知錯誤') + '（請確認班 Script 已加入 BudgetVersions.gs）', 'err');
+  }
+}
+
 function financeAdd(st) {
   const inputs = {};
   const body = h('div', {});
@@ -106,6 +121,7 @@ regPage('finance', function (root) {
   head.appendChild(stats);
   const btns = h('div', { class: 'btn-row' });
   btns.appendChild(h('button', { class: 'btn btn-sm btn-primary', onclick: () => financeAdd(st) }, '➕ 新增支出'));
+  btns.appendChild(h('button', { class: 'btn btn-sm', onclick: () => submitBudgetForApproval() }, '📊 提交 Budget 批核'));
   btns.appendChild(h('button', { class: 'btn btn-sm', onclick: () => window.print() }, '🖨️ 列印收支表'));
   if (st.stats.approvedUnpaid) {
     btns.appendChild(h('button', { class: 'btn btn-sm btn-ghost', onclick: () => { _intakeFilter = 'unpaid'; nav('intake'); } }, '💰 ' + st.stats.approvedUnpaid + ' 位未核對收款'));
@@ -119,7 +135,8 @@ regPage('finance', function (root) {
   /* ── 預算對比（邊項仲有幾錢使） ── */
   const bud = budgetSummary(st);
   const budCard = h('div', { class: 'card fin-screen' });
-  budCard.appendChild(h('div', { class: 'card-title' }, '📋 預算 vs 實際（Input01 預算・Input04 支出）'));
+  budCard.appendChild(h('div', { class: 'card-title' }, '📋 預算 vs 實際（最新已批 Budget・Input04 支出）'));
+  budCard.appendChild(h('div', { class: 'row-sub' }, 'V1 係開班前初版；V2+ 通常係收生後因實際人數大變而提交。管理層批核 Budget 版本後，班 Script 會把該版本寫回 Input01，Print_財政預算同本收支表會自動跟最新已批版本。'));
   const bWrap = h('div', { class: 'table-scroll' });
   const bTbl = h('table', { class: 'data-table' });
   bTbl.appendChild(h('thead', null, h('tr', null,
