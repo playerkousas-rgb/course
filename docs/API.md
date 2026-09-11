@@ -37,7 +37,7 @@
 | 密匙 | 數量 | 喺邊 | 用途 |
 |---|---|---|---|
 | 開班碼 `masterKey` | 1（可選，預設留空＝唔使） | 「設定」分頁 | `createCourse`／`registerCourse`；留空＝任何拎到 /exec 嘅人都可以開班（只會產生空班、唔掂到已有班） |
-| **區系統密匙 `opsKey`** | 1（setup 自動產生） | 「設定」分頁，後台 `adminListCourses.secrets.opsKey` 可隨時取回 | 區管理系統**專用**：唔使逐班 apiKey，`opsKey`＋`publicCourseId` 即可；只通行白名單 action：`getCourseProfile`／`getCourseSummary`／`listRegs`／`listBudgetVersions`／`setPaymentCheck`／`setCourseRefund`／`approveBudgetVersion`；另 `setParamLabel`（tick「區會批准」等參數）必須帶 `opsKey`（舊開班碼 `masterKey` 仍相容） |
+| **區系統密匙 `opsKey`** | 1（setup 自動產生） | 「設定」分頁，後台 `adminListCourses.secrets.opsKey` 可隨時取回 | 區管理系統**專用**：唔使逐班 apiKey，`opsKey`＋`publicCourseId` 或 CL 提供嘅 GS 網址 `fileId` 即可（對應唔到 ID 可先 call 公開 `listCourses` 用班名對）；只通行白名單 action：`getCourseProfile`／`getCourseSummary`／`listRegs`／`listBudgetVersions`／`setPaymentCheck`／`setCourseRefund`／`approveBudgetVersion`；另 `setParamLabel`（tick「區會批准」等參數）必須帶 `opsKey`（舊開班碼 `masterKey` 仍相容） |
 | 後台帳密 `adminUser`／`adminPassword` | 1 組（setup 自動產生，帳號預設 `admin`） | 「設定」分頁，後台登入後 `secrets` 都有 | `adminListCourses`／`adminDeleteCourse`／`importCourse`；亦係每班登入頁「帳號:密碼」嘅後備管理員。**唔再寫死喺 code** |
 
 - **首登強制改密碼（v6.2）**：新班／新登記班未改預設密碼 `1234` 前，所有寫入 action（`saveCourseBatch`／`setRegStatus`／收支／批核／通知書…）回
@@ -57,7 +57,7 @@
 | `setPaymentCheck` | `id`(=時間戳記),`verified`,`by` | `{saved,row,verified}` | **區管理系統財務用**：核對區帳戶後 tick「已核對收款」；identity 定位、唔 bump rev、自動補表頭 |
 | `setCourseRefund` | `id`(=時間戳記),`refunded`,`by` | `{saved,row,refunded}` | **區管理系統財務用**：已退款 tick，寫 AX/AY；CL App 只讀顯示 |
 | `setParamLabel` | `opsKey`,`fileId` 或 `publicCourseId`,`label`,`value` | `{saved,row,label}` | **區管理系統專用（v6.2 起必須 opsKey）**：寫班 GS「參數」分頁（tick「區會批准」、FPS 資料等）；CL App 唔呼叫 |
-| `addReg` | 職員：`apiKey`；**公開：只帶 `publicCourseId`**＋`nameZh,phone,email,receiptDataUrl,…` | `{refCode}` | 成員系統報名。公開途徑 write-only（唔使 key、唔回讀資料）、只接受公開ID、節流 20／10 分鐘／班、必填入數紙截圖；同電郵未取消紀錄防重複；pending 由 CL 批核 |
+| `addReg` | 職員：`apiKey`；**公開：只帶 `publicCourseId`**＋報名欄位（見下） | `{refCode}` | 成員系統報名。公開途徑 write-only（唔使 key、唔回讀資料）、只接受公開ID、節流 20／10 分鐘／班、必填入數紙截圖；同電郵未取消紀錄防重複；pending 由 CL 批核 |
 | `sendRegNotice` | `ids?`,`by?` | `{sent,skipped,failed,results}` | **訓練班系統用**：CL 發接納／不接納通知書；ReplyTo=訓練班電郵；寫 AZ/BA 防重寄 |
 | `submitBudgetVersion` | `reason`,`by` | `{version,status,snapshot}` | **訓練班系統用**：提交 Budget V1/V2 給管理層批核 |
 | `listBudgetVersions` | — | `{versions,currentApproved}` | 查閱 Budget 版本紀錄 |
@@ -74,6 +74,43 @@
 | `addExpenseRow` | `amounts{B..J}`,`note` | `{added,row,receiptNo}` | 〔二階段〕支出 append-only，唔撞 rev |
 | `setCompletionRow` | `code|name`,`certNo?,pass?,failReason?` | `{updated,row,rev}` | 〔二階段〕完成報告 |
 | `setCertRow` | `code|name`,`certNo?,pickupDate?,signed?` | `{updated,row,rev}` | 〔二階段〕證書領取 |
+
+### addReg 報名欄位（v6.2.1：報名表全部欄位都寫入，唔再靜默丟失）
+
+入參 → 「表格回應」寫入欄對應（GAS `hcsAddReg_` 同 mock 同一合約）：
+
+| 入參 | 別名 | 寫入欄 | 備註 |
+|---|---|---|---|
+| `nameZh` | — | 中文姓名 | **必填** |
+| `phone` | — | 聯絡電話 | **必填** |
+| `email` | — | 電郵地址 | **必填**；同電郵未取消紀錄防重複 |
+| `receiptDataUrl` | — | 已繳付訓練班費用截圖 | **必填**（入數紙）；`data:URL` 自動存入原點 Drive「訓練班文件」下以班命名嘅資料夾（best effort，失敗唔阻報名） |
+| `nameEn` | — | 英文姓名 | 選填 |
+| `gender` | — | 性別 | 選填 |
+| `dob` | — | 出生日期 | 選填 |
+| `scoutDistrict` | — | 所屬童軍區 | 預設「筲箕灣」 |
+| `troop` | — | 旅團 | 選填 |
+| `scoutId` | — | 童軍成員編號（ScoutID） | 選填 |
+| `scoutPosition` | `scoutRank` | 童軍職位 | 選填 |
+| `reason` | `extra` | 附加資料(有助訓練班取錄之原因) | 選填 |
+| `consentParent` | — | 家長／監護人同意參與有關活動。 | truthy（`true`/`'true'`/`1`/`'1'`/`'✔'`/`'是'`）自動變 `✔` |
+| `gName` | `guardianName` | 家長/監護人姓名 | 選填 |
+| `gRelation` | `guardianRelation` | 與申請人關係 | 選填 |
+| `gEmail` | `guardianEmail` | 家長/監護人聯絡電郵 | 選填 |
+| `gPhone` | `guardianPhone` | 家長/監護人聯絡電話 | 選填 |
+| `consentLeader` | — | 所屬童軍旅領袖同意參與有關活動。 | truthy 自動變 `✔` |
+| `leaderName` | — | 領袖姓名（中文全名） | 選填 |
+| `leaderTitle` | — | 領袖職位 | 選填 |
+| `leaderEmail` | — | 領袖聯絡電郵 | 選填 |
+| `payMethod` | — | 付款方式 | 預設 `FPS` |
+| `payer` | `payerName` | 付款人姓名 | 選填 |
+| `payAccount` | — | 付款帳戶 | 選填 |
+| `formDataUrl` | `formShotDataUrl`／`formScreenshot` | 已填妥之表格截圖(上課時需交回正本) | `data:URL` 自動存入原點 Drive（同入數紙分開資料夾；best effort） |
+| `needReceipt` | — | 是否需要收據 | truthy → `✔` |
+| `remark` | `comment` | 備註 | 選填 |
+
+> 審批狀態一律寫入 `pending`（由 CL 用 `setRegStatus` 批核）；入數紙同表格截圖兩類 `data:URL`
+> 會分開存入「{班名}_付款證明」／「{班名}_表格截圖」資料夾。
 
 ## getCourseSummary 精簡批核 view（coursev5）
 

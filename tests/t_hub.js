@@ -90,7 +90,7 @@ async function main() {
   /* ══ Hub 語義（單一 mock /exec＋登記表對應） ══ */
   section('hubInfo');
   const hi = await G.MockAPI.call('hubInfo', {});
-  ok(hi.ok && /^6\.2\.0/.test(hi.data.hubVersion), 'hub 版本');
+  ok(hi.ok && /^6\.2\.[1-9]/.test(hi.data.hubVersion), 'hub 版本');
   ok(hi.data.ready === true && hi.data.courses.active >= 1, 'hub ready＋班數');
   ok(typeof hi.data.ownerEmail === 'string' && /.+@.+\..+/.test(hi.data.ownerEmail), 'ownerEmail（原點帳戶電郵：分享指引用）');
 
@@ -161,6 +161,15 @@ async function main() {
   ok(opsRegs.ok, 'opsKey 睇 listRegs（白名單）');
   const opsWrite = await G.MockAPI.call('saveCourseBatch', { opsKey: G.MOCK_OPS_KEY, publicCourseId: PIDB, cells: [] });
   ok(!opsWrite.ok, 'opsKey 唔可以改班內容（saveCourseBatch 唔喺白名單）');
+  /* 區系統收嘅係 CL 嘅 GS 網址：用檔案ID（fileId）一樣對到 */
+  const cc2meta = val(ctx, 'mockRegistry()')[KB];
+  ok(cc2meta && cc2meta.fileId, 'B 班登記有 GS 檔案ID');
+  const opsByFile = await G.MockAPI.call('getCourseSummary', { opsKey: G.MOCK_OPS_KEY, fileId: cc2meta.fileId });
+  ok(opsByFile.ok, 'opsKey＋fileId（GS 網址）都可以睇 getCourseSummary');
+  const tickByFile = await G.MockAPI.call('setParamLabel', { opsKey: G.MOCK_OPS_KEY, fileId: cc2meta.fileId, label: 'FPS 戶口名稱', value: '筲箕灣區' });
+  ok(tickByFile.ok, 'opsKey＋fileId 都可以 setParamLabel');
+  const pubByFile = await G.MockAPI.call('addReg', { fileId: cc2meta.fileId, email: 'x@example.hk', nameZh: 'x', phone: '1', receiptDataUrl: 'data:image/png;base64,x' });
+  ok(!pubByFile.ok, '公開 addReg 唔接受 fileId（只接受通告上嘅公開ID）');
   const opsPw = await G.MockAPI.call('setPassword', { opsKey: G.MOCK_OPS_KEY, publicCourseId: PIDB, oldPassword: 'x', newPassword: 'yyyy' });
   ok(!opsPw.ok, 'opsKey 唔可以改班密碼');
 
