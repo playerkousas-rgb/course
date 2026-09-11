@@ -258,7 +258,8 @@ const UI = {
     const card = h('div', { class: 'card' });
     card.appendChild(h('div', { class: 'card-title' }, '🆕 新開班（CL 起表）'));
     card.appendChild(h('div', { class: 'row-sub' },
-      '只填課程資料（名稱／班領導人／名額／收費…）即刻自動起一張新班 Sheet＋自動登記——唔使貼 template id／folder id／Script URL／API Key，唔使逐班部署。之後喺 APP 填晒預算／節次／時間表／通告（全部寫入班 GS），複製 GS 網址交區管理系統；區管理層批好 tick「區會批准」，之後先生成通告交區網頁管理員，上網貼返通告網址就正式掛載成員系統報名。'));
+      '只填課程資料（名稱／班領導人／名額／收費…）即刻自動起一張新班 Sheet＋自動登記——唔使貼 template id／folder id／Script URL／API Key，唔使逐班部署。之後喺 APP 填晒預算／節次／時間表／通告（全部寫入班 GS），複製 GS 網址交區管理系統；區管理層批好 tick「區會批准」，之後先生成通告交區網頁管理員，上網貼返通告網址就正式掛載成員系統報名。'
+      + '（班 Sheet 唔想放喺原點帳戶？用下面「📥 我已有 Sheet，登記就得」：自己帳戶開空白 GS → 分享俾原點帳戶 → 貼網址登記。）'));
 
     const nmIn = h('input', { class: 'input', type: 'text', placeholder: '例：遠足專科徽章訓練班（必填）' });
     const edIn = h('input', { class: 'input', type: 'number', placeholder: '屆別，例：2（可選）' });
@@ -269,8 +270,11 @@ const UI = {
     const intakeIn = h('input', { class: 'input', type: 'number', placeholder: '預計收生人數（可選）' });
     const feeIn = h('input', { class: 'input', type: 'number', placeholder: '預計收費（元，可選）' });
     const clIn = h('input', { class: 'input', type: 'text', placeholder: '班領導人姓名（可選，建議填）' });
+    const clEmailIn = h('input', { class: 'input', type: 'email', placeholder: '班領導人電郵（可選；新班 Sheet 自動加佢做編輯者）' });
     const factoryIn = h('input', { class: 'input', type: 'url', placeholder: 'https://script.google.com/macros/s/…/exec（訓練班系統單一後端）', value: ((Store.config && (Store.config.hubExec || Store.config.factoryExec)) || '') });
     const masterIn = h('input', { class: 'input', type: 'text', placeholder: '開班碼（可選；原點 GS「設定」有設定先要填）', value: (Store.config.factoryKey || '') });
+    const regUrlIn = h('input', { class: 'input', type: 'url', placeholder: '例：https://docs.google.com/spreadsheets/d/……/edit' });
+    const regNmIn = h('input', { class: 'input', type: 'text', placeholder: '例：遠足專科徽章訓練班（留空＝自動用 Sheet 名）' });
     const msg = h('div', { class: 'form-msg' });
 
     async function doCreate(mockMode) {
@@ -280,6 +284,7 @@ const UI = {
       const payload = {
         courseName: nm, edition: edIn.value, section: secSel.value, badge: badgeIn.value,
         intake: intakeIn.value, fee: feeIn.value, clName: clIn.value.trim(),
+        clEmail: clEmailIn.value.trim(),
       };
       let res;
       if (mockMode) {
@@ -295,8 +300,8 @@ const UI = {
       if (!res || !res.ok) { msg.textContent = '起表失敗：' + ((res && res.error) || '未知錯誤'); msg.className = 'form-msg err'; return; }
       const d = res.data;
       const id = mockMode
-        ? Store.addCourse({ mock: true, id: d.apiKey, key: d.apiKey, name: nm, gsUrl: d.url || '', directRegUrl: d.directRegUrl || '', publicCourseId: d.publicCourseId || '', fresh: true })
-        : Store.addCourse({ exec: d.exec, key: d.apiKey, name: nm, gsUrl: d.url || '', directRegUrl: d.directRegUrl || '', publicCourseId: d.publicCourseId || '', fresh: true });
+        ? Store.addCourse({ mock: true, id: d.apiKey, key: d.apiKey, name: nm, gsUrl: d.url || '', directRegUrl: d.directRegUrl || '', publicCourseId: d.publicCourseId || '', via: 'hub-created', fresh: true })
+        : Store.addCourse({ exec: d.exec, key: d.apiKey, name: nm, gsUrl: d.url || '', directRegUrl: d.directRegUrl || '', publicCourseId: d.publicCourseId || '', via: 'hub-created', fresh: true });
       Store.setActive(id);
       toast('✅ 新班 Sheet 已自動產生＋登記「' + nm + '」——首次密碼 1234，入去先改密碼，之後複製 GS 網址交區管理系統批核', 'ok');
       UI.render();
@@ -364,14 +369,67 @@ const UI = {
       h('div', { class: 'field' }, h('label', { class: 'flabel' }, '專章'), badgeIn),
       h('div', { class: 'field' }, h('label', { class: 'flabel' }, '預計收生人數'), intakeIn),
       h('div', { class: 'field' }, h('label', { class: 'flabel' }, '預計收費（元）'), feeIn),
-      h('div', { class: 'field' }, h('label', { class: 'flabel' }, '班領導人姓名'), clIn)));
+      h('div', { class: 'field' }, h('label', { class: 'flabel' }, '班領導人姓名'), clIn),
+      h('div', { class: 'field' }, h('label', { class: 'flabel' }, '班領導人電郵（可選）'), clEmailIn)));
     card.appendChild(h('div', { class: 'field' }, h('label', { class: 'flabel' }, '訓練班系統 /exec（原點 GS 單一後端）——新開班／選班只需填呢條；演示唔使'), factoryIn));
     card.appendChild(h('div', { class: 'field' }, h('label', { class: 'flabel' }, '開班碼（可選；原點 GS「設定」有設定先要填。選已有班只需本班密碼，唔會公開 API Key）'), masterIn));
     card.appendChild(msg);
+    async function doRegister(mockMode) {
+      msg.textContent = ''; msg.className = 'form-msg';
+      const url = regUrlIn.value.trim();
+      if (!url) { msg.textContent = '請貼該班 Sheet 嘅 GS 網址（開班前記得先喺 Drive 分享（編輯者）俾原點帳戶電郵）。'; msg.className = 'form-msg err'; return; }
+      const payload = { url: url };
+      if (regNmIn.value.trim()) payload.courseName = regNmIn.value.trim();
+      if (clIn.value.trim()) payload.clName = clIn.value.trim();
+      if (clEmailIn.value.trim()) payload.clEmail = clEmailIn.value.trim();
+      let res;
+      if (mockMode) {
+        try { res = await MockAPI.call('registerCourse', payload); }
+        catch (e) { res = { ok: false, error: '演示後台錯誤：' + (e && e.message) }; }
+      } else {
+        const fx = factoryIn.value.trim(), mk = masterIn.value.trim();
+        if (!fx) { msg.textContent = '請填訓練班系統 /exec（原點 GS 部署出嚟嗰條）。'; msg.className = 'form-msg err'; return; }
+        Store.config.hubExec = fx; Store.config.factoryExec = fx; Store.config.factoryKey = mk; Store.saveConfig();
+        payload.masterKey = mk;
+        res = await apiCall('registerCourse', payload, { exec: fx, key: mk });
+      }
+      if (!res || !res.ok) { msg.textContent = '登記失敗：' + ((res && res.error) || '未知錯誤'); msg.className = 'form-msg err'; return; }
+      const d = res.data;
+      const nm2 = d.courseName || regNmIn.value.trim() || '已登記訓練班';
+      const id = mockMode
+        ? Store.addCourse({ mock: true, id: d.apiKey, key: d.apiKey, name: nm2, gsUrl: d.url || '', directRegUrl: d.directRegUrl || '', publicCourseId: d.publicCourseId || '', via: 'registered', fresh: true })
+        : Store.addCourse({ exec: d.exec, key: d.apiKey, name: nm2, gsUrl: d.url || '', directRegUrl: d.directRegUrl || '', publicCourseId: d.publicCourseId || '', via: 'registered', fresh: true });
+      Store.setActive(id);
+      toast('✅ 已登記你嘅 Sheet「' + nm2 + '」——模版結構已就地補齊（原有內容唔會被覆蓋）；首次密碼 1234，入去先改密碼', 'ok');
+      UI.render();
+    }
+
     card.appendChild(h('div', { class: 'btn-row' },
       h('button', { class: 'btn btn-primary', onclick: () => doCreate(true) }, '🚀 起表（演示）'),
       h('button', { class: 'btn', onclick: () => doCreate(false) }, '🏛 連區會起表（即刻開真 GS）'),
       h('button', { class: 'btn btn-ghost', onclick: () => doPickRegistered(false) }, '📚 從登記表選班')));
+
+    /* ── 我已有 Sheet，登記就得（班 Sheet 可喺任何帳戶開；登記表只係指針） ── */
+    card.appendChild(h('div', { class: 'card-title', style: { marginTop: '18px' } }, '📥 我已有 Sheet，登記就得'));
+    card.appendChild(h('div', { class: 'row-sub' },
+      '班 Sheet 唔使放喺區會／原點帳戶：喺你自己帳戶開一張空白 Google Sheet → Drive 分享（編輯者）俾原點帳戶電郵（即部署訓練班系統嗰個帳戶；問管理層攞，或撳「查原點電郵」）→ 貼返網址登記。'
+      + '系統會驗證讀取權、就地補齊模版結構（只補缺、唔覆蓋你已有嘅內容），再自動生成連線三件套。班內容擁有權永遠留喺你嗰邊，冇人需要交出帳戶。'));
+    async function checkOwner() {
+      const fx = factoryIn.value.trim();
+      if (!fx) { msg.textContent = '請先填訓練班系統 /exec，先可以查原點帳戶電郵。'; msg.className = 'form-msg err'; return; }
+      msg.textContent = '查詢原點帳戶中…'; msg.className = 'form-msg';
+      const res = await apiCall('hubInfo', {}, { exec: fx, key: '' });
+      if (!res || !res.ok) { msg.textContent = '查唔到：' + ((res && res.error) || '連線失敗'); msg.className = 'form-msg err'; return; }
+      msg.textContent = '請喺 Drive 將該 Sheet 分享（編輯者）俾：' + ((res.data && res.data.ownerEmail) || '（後端冇回電郵——直接問管理層）');
+      msg.className = 'form-msg ok';
+    }
+    card.appendChild(h('div', { class: 'grid-2c' },
+      h('div', { class: 'field' }, h('label', { class: 'flabel' }, '該班 Sheet 嘅 GS 網址＊'), regUrlIn),
+      h('div', { class: 'field' }, h('label', { class: 'flabel' }, '班名（可留空＝自動用 Sheet 名）'), regNmIn)));
+    card.appendChild(h('div', { class: 'btn-row' },
+      h('button', { class: 'btn btn-primary', onclick: () => doRegister(true) }, '📥 登記（演示）'),
+      h('button', { class: 'btn', onclick: () => doRegister(false) }, '🏛 連原點登記'),
+      h('button', { class: 'btn btn-ghost', onclick: () => checkOwner() }, '🔎 查原點電郵（分享俾邊個）')));
     return card;
   },
 

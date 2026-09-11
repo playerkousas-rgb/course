@@ -89,8 +89,9 @@ async function main() {
   /* ══ Hub 語義（單一 mock /exec＋登記表對應） ══ */
   section('hubInfo');
   const hi = await G.MockAPI.call('hubInfo', {});
-  ok(hi.ok && /^6\.0\.0/.test(hi.data.hubVersion), 'hub 版本');
+  ok(hi.ok && /^6\.1\.0/.test(hi.data.hubVersion), 'hub 版本');
   ok(hi.data.ready === true && hi.data.courses.active >= 1, 'hub ready＋班數');
+  ok(typeof hi.data.ownerEmail === 'string' && /.+@.+\..+/.test(hi.data.ownerEmail), 'ownerEmail（原點帳戶電郵：分享指引用）');
 
   section('新開班（三件套：內部課程ID／公開課程ID／API Key）');
   G.MockDemo.reset();
@@ -167,6 +168,92 @@ async function main() {
   ok(imp.ok && imp.data.imported === true, '舊班登記入原點');
   const connL = await G.MockAPI.call('connectCourseByPassword', { publicCourseId: imp.data.publicCourseId, password: '1234' });
   ok(connL.ok && connL.data.exec === 'https://legacy.example/exec', '舊班選班 → 回該班自己 /exec（前端照舊直連）');
+
+  section('createCourse 選填 clEmail（自動分享班領導人）');
+  const ccC = await G.MockAPI.call('createCourse', { courseName: '分享班 C', clName: '陳大文', clEmail: 'cl3@example.hk' });
+  ok(ccC.ok, 'createCourse 帶 clEmail 照樣成功');
+  const metaC = val(ctx, 'mockRegistry()')[ccC.data.apiKey];
+  ok(metaC && metaC.clEmail === 'cl3@example.hk', '登記表 meta 記低 clEmail');
+  ok(metaC && /^mock-/.test(metaC.fileId), '自動起嘅班都有檔案ID（供重複登記偵測）');
+
+  section('registerCourse（登記表只係指針：Sheet 喺邊個帳戶開都得）');
+  const rc = await G.MockAPI.call('registerCourse', {
+    url: 'https://docs.google.com/spreadsheets/d/cl-own-sheet-1/edit?usp=drivesdk',
+    courseName: 'CL 自開班', clName: '張小美', clEmail: 'cl4@example.hk', intake: 18, fee: 90,
+    sessions: [{ date: '2026-12-05', time: '1930 - 2130', venue: '區總部', onNotice: true }],
+  });
+  ok(rc.ok, '網址入參 → 登記 ok');
+  ok(rc.data.registered === true, 'registered:true');
+  eq(rc.data.exec, 'mock', '登記班照樣用原點 /exec（單一後端）');
+  ok(/^crs_/.test(rc.data.publicCourseId) && /^ck_reg_/.test(rc.data.apiKey), '登記班都自動產三件套');
+  ok(/cl-own-sheet-1/.test(rc.data.url), '回傳該班 Sheet 自己嘅 url（擁有權留喺原帳戶）');
+  /* 就地補齊模版結構＋預填（getCourseSheetRaw 驗證） */
+  const rawR = await G.MockAPI.call('getCourseSheetRaw', { apiKey: rc.data.apiKey });
+  ok(rawR.ok, '登記班即刻讀到');
+  eq(rawR.data.resp[0], G.RESP_HEADERS, 'resp 頁頭齊（模版結構已就地補齊）');
+  eq(rawR.data.rev, 0, '_Sync rev 0（新登記班由 0 開始）');
+  ok(String(rawR.data.input01[0][1]) === 'CL 自開班', '預填班名');
+  eq(rawR.data.input02[8][1], '2026-12-05', '登記帶 sessions 都預填（Input02 B9）');
+  ok(rawR.data.paramsWX.some(r => r[0] === '公開課程ID' && r[1] === rc.data.publicCourseId), '參數分頁寫入公開課程ID');
+  /* 重複登記＝拒絕 */
+  const dup = await G.MockAPI.call('registerCourse', { fileId: 'cl-own-sheet-1' });
+  ok(!dup.ok && /該 Sheet 已登記/.test(dup.error), '重複登記同一檔案 → 拒絕');
+  const dup2 = await G.MockAPI.call('registerCourse', { url: 'https://docs.google.com/spreadsheets/d/cl-own-sheet-1/view' });
+  ok(!dup2.ok && /已登記（CL 自開班）/.test(dup2.error), '經網址重複登記 → 拒絕（連班名）');
+  /* 冇讀取權 → 提示分享 */
+  const na = await G.MockAPI.call('registerCourse', { fileId: 'noaccess-sheet-9' });
+  ok(!na.ok && /原點帳戶讀唔到.*分享（編輯者）/.test(na.error), '原點讀唔到 → 提示分享俾原點帳戶電郵');
+  const noUrl = await G.MockAPI.call('registerCourse', {});
+  ok(!noUrl.ok && /請貼該班 Sheet/.test(noUrl.error), '冇 url/fileId → 明確報錯');
+  /* 登記班喺後台／選班流程零分別 */
+  const al2 = await G.MockAPI.call('adminListCourses', { adminUser: 'sheep', adminPassword: '0728' });
+  ok(al2.ok && al2.data.courses.some(c => c.publicCourseId === rc.data.publicCourseId && c.apiKey === rc.data.apiKey), 'adminList 見到登記班（含連線資料）');
+  const connR = await G.MockAPI.call('connectCourseByPassword', { publicCourseId: rc.data.publicCourseId, password: '1234' });
+  ok(connR.ok && connR.data.apiKey === rc.data.apiKey && connR.data.exec === 'mock', '選班 → 登記班照常取回連線');
+  ok(connR.ok && connR.data.firstLogin === true, '登記班首次密碼 1234＋firstLogin');
+  const rawR2 = await G.MockAPI.call('saveCourseBatch', { apiKey: rc.data.apiKey, cells: [{ tab: G.TAB.IN2, row: 4, col: 2, value: 20 }], by: '張小美' });
+  ok(rawR2.ok && rawR2.data.rev === 1, '登記班寫入＋rev bump 照 coursev5 合約');
+
+  section('hubRepairTemplate_（GAS 函式：只補缺、唔覆蓋既有內容）');
+  function mkFakeSheet(name) {
+    const grid = [];
+    const ensure = (r, c) => { while (grid.length < r) grid.push([]); for (let i = 0; i < grid.length; i++) while (grid[i].length < c) grid[i].push(''); };
+    return {
+      name, hidden: false, grid,
+      getRange(r, c, nr, nc) {
+        nr = nr || 1; nc = nc || 1;
+        const self = {
+          getValue() { ensure(r, c); return grid[r - 1][c - 1]; },
+          setValue(v) { for (let i = 0; i < nr; i++) for (let j = 0; j < nc; j++) { ensure(r + nr, c + nc); grid[r - 1 + i][c - 1 + j] = v; } return self; },
+          getValues() { ensure(r + nr, c + nc); const out = []; for (let i = 0; i < nr; i++) out.push(grid[r - 1 + i].slice(c - 1, c - 1 + nc)); return out; },
+          setValues(vals) { vals.forEach((rv, i) => rv.forEach((v, j) => { ensure(r + nr, c + nc); grid[r - 1 + i][c - 1 + j] = v; })); return self; },
+          setFormula() { return self; },
+          setFormulas() { return self; },
+        };
+        return self;
+      },
+      hideSheet() { this.hidden = true; },
+      getMaxRows() { return grid.length; },
+      getMaxColumns() { return grid.reduce((x, r) => Math.max(x, r.length), 0); },
+      insertRowsAfter() {}, insertColumnsAfter() {},
+    };
+  }
+  const fakeSheets = {};
+  const fakeSs = {
+    getSheetByName: (n) => fakeSheets[n] || null,
+    insertSheet: (n) => (fakeSheets[n] = mkFakeSheet(n)),
+  };
+  /* 模擬 CL 自己帳戶嘅 GS：得一張「表格回應」，表頭寫咗一半（仲改咗頭兩格名） */
+  fakeSheets['表格回應'] = mkFakeSheet('表格回應');
+  fakeSheets['表格回應'].getRange(1, 1, 1, 5).setValues([['我的時間', '我的電郵', '', '', '']]);
+  const repair = val(ctx, 'hubRepairTemplate_');
+  repair(fakeSs);
+  const repHead = fakeSheets['表格回應'].getRange(1, 1, 1, 53).getValues()[0];
+  eq(repHead[0], '我的時間', '已有內容嘅表頭格唔會被覆寫（col1 保留）');
+  eq(repHead[1], '我的電郵', '已有內容嘅表頭格唔會被覆寫（col2 保留）');
+  eq(repHead[2], '中文姓名', '空缺嘅表頭格先補返（col3）');
+  ok(!!fakeSheets['Input01 訓練班預算'] && !!fakeSheets['參數'], '缺分頁補分頁（Input01／參數）');
+  ok(!!fakeSheets['_Sync'] && String(fakeSheets['_Sync'].grid[0][0]) === '0' && fakeSheets['_Sync'].hidden === true, '_Sync 補建（rev 0＋隱藏）');
 
   G.MockDemo.reset();
   done();

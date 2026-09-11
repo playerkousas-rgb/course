@@ -280,3 +280,35 @@
 3. 開第二班驗隔離（獨立 rev／密碼／鎖）；成員系統 `addReg`（direct link）驗流入正確班。
 4. `importCourse` 登記一個舊制班 → 「從登記表選班」驗 proxy。
 5. 後台清理開錯班（可選移垃圾桶）。
+
+---
+
+## 後續（2026-09-11）：擁有權／registerCourse——登記表只指向 Sheet
+
+**背景**：單一原點合併後，用戶指出關鍵痛點——「我原本就只是一個登記表單指向不同
+SHEET……所有 SHEET 會在同一個帳戶內，那是機密帳戶我怎給」。`createCourse` 自動起嘅
+班 Sheet 屬於**部署原點嗰個帳戶**；若原點係機密帳戶就唔啱用，亦唔應該要求任何人
+「交出帳戶」。結論：原點 GS 必須保持做**指針登記表**，班 Sheet 喺邊個帳戶開都得。
+
+**四點決定**：
+
+1. **新增 `registerCourse` hub action**（`CourseHub.gs` `hubRegisterCourse_`）：
+   CL 自己帳戶開空白 GS → Drive 分享（編輯者）俾原點帳戶電郵 → 喺 App 貼網址登記。
+   hub 驗證讀取權（唔得即報「原點帳戶讀唔到呢張 Sheet——請先分享」）→
+   `hubRepairTemplate_` **就地補齊模版結構（只補缺、唔覆蓋既有內容）** →
+   用抽出嘅 `hubPrefillCourse_`（`fillGapsOnly`）預填基本資料 → 生成三件套＋登記指針
+   （同檔防重複登記；原點自己張 GS 唔准登記做班）。前端「📥 我已有 Sheet，登記就得」
+   ＋mock 同合約；登記班同自動起嘅班在選班／連線／批核上零分別。
+2. **`createCourse` 加選填 `clEmail`**：新班 Sheet 自動 `addEditor` 班領導人電郵
+   （區管理電郵 `opsEmail` 自動分享已有）——班一開好已經喺 CL 自己 Drive 见到／可分享。
+3. **`hubInfo` 回傳 `ownerEmail`**（原點帳戶電郵）：UI「🔎 查原點電郵」話俾 CL 知
+   張 Sheet 要分享俾邊個，唔使人手問。
+4. **文件立場**（COURSEHUB.md「擁有權與權限」）：建議用**專門嘅非機密帳戶**部署原點；
+   就算暫唔換帳戶，權限也只係**逐個檔案嘅 Drive 分享（編輯者）**——冇人要交帳戶密碼，
+   原點 GS 永遠唔放班內容。
+
+**版本**：`HUB_VERSION` 6.0.0 → **6.1.0**（合約向後兼容：只加 action／加欄位，冇改既有回應）。
+**測試**：`tests/t_hub.js` 新增 registerCourse（網址入參／重複登記／冇讀取權／就地補結構／
+選班照用／`createCourse.clEmail`／`hubRepairTemplate_` 只補缺唔覆蓋——用 fake sheet 直接跑 GAS 函式）。
+**真機煙霧加項**：6. CL 自己帳戶開空白 GS → 分享（編輯者）俾 `ownerEmail` →
+「我已有 Sheet」登記 → 入班補結構後照常改密碼／填數；重複登記驗拒絕。

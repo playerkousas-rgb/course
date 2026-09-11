@@ -489,7 +489,7 @@ function mockCheckBaseRev(state, baseRev) {
 
 /* ── 合約實作（hub 語義：單一 mock /exec＋登記表對應；同 CourseHub.gs） ── */
 /* hub actions：唔使班級 apiKey（入班對應／密碼另驗） */
-const MOCK_HUB_ACTIONS = ['createCourse', 'listCourses', 'connectCourseByPassword', 'adminListCourses', 'adminDeleteCourse', 'hubInfo', 'importCourse'];
+const MOCK_HUB_ACTIONS = ['createCourse', 'registerCourse', 'listCourses', 'connectCourseByPassword', 'adminListCourses', 'adminDeleteCourse', 'hubInfo', 'importCourse'];
 
 const MockAPI = {
   call: async function (action, b) {
@@ -506,23 +506,27 @@ const MockAPI = {
     if (authFail && action !== 'getCourseProfile' && MOCK_HUB_ACTIONS.indexOf(action) < 0) return authFail;
     if (action === 'hubInfo') {
       return mockOk({
-        hubVersion: '6.0.0-mock',
+        hubVersion: '6.1.0-mock',
         templateVersion: (typeof HUB_TEMPLATE_VERSION !== 'undefined') ? HUB_TEMPLATE_VERSION : '1.0.0',
         setupAt: '', ready: true,
-        courses: { active: mockMetaRows(false).length, archived: 0 }
+        courses: { active: mockMetaRows(false).length, archived: 0 },
+        ownerEmail: 'skw-training-system@example.org'   /* 原點帳戶電郵：登記自己 Sheet 前先分享（編輯者）俾呢個 */
       });
     }
     if (action === 'createCourse') {
-      /* CourseHub 合約：新開班＝自動起班＋登記（三件套：內部課程ID／公開課程ID／API Key） */
+      /* CourseHub 合約：新開班＝自動起班＋登記（三件套：內部課程ID／公開課程ID／API Key）
+       * 選填 clEmail＝自動加班領導人做編輯者（mock 只記喺 meta，反映後端會 share） */
       const nm = String(b.courseName || '').trim();
       if (!nm) return mockErr('請填課程名稱');
       const rnd = () => Math.random().toString(36).slice(2, 8);
       const apiKey = 'ck_new_' + Date.now().toString(36) + rnd();
+      const fileId = 'mock-' + Date.now().toString(36) + rnd();
       const meta = {
         courseId: 'crs_' + rnd(), publicCourseId: 'crs_' + rnd(),
         name: nm, cl: String(b.clName || ''), status: 'active',
         createdAt: new Date().toISOString(),
-        url: 'https://docs.google.com/spreadsheets/d/mock-' + Date.now().toString(36), exec: ''
+        fileId: fileId, clEmail: String(b.clEmail || ''),
+        url: 'https://docs.google.com/spreadsheets/d/' + fileId, exec: ''
       };
       const reg = mockCourses();
       reg[apiKey] = mockBlankState(nm, b, meta);
@@ -532,6 +536,44 @@ const MockAPI = {
         exec: 'mock', apiKey: apiKey,
         courseId: meta.courseId, publicCourseId: meta.publicCourseId,
         courseName: nm, firstLogin: true, url: meta.url,
+        directRegUrl: 'https://member-portal-sigma-swart.vercel.app/training?courseId=' + encodeURIComponent(meta.publicCourseId),
+      });
+    }
+    if (action === 'registerCourse') {
+      /* CourseHub 合約：登記 CL 自己帳戶已開嘅空白 GS（登記表只係指針）。
+       * 語義對齊 GAS：網址抽 ID／冇讀取權（noaccess）→ 提示分享／
+       * 重複登記→拒絕／補齊模版結構＝mockBlankState 鏡像（只補缺唔覆蓋） */
+      let fileId = String(b.fileId || '').trim();
+      if (!fileId && b.url) {
+        const mm = String(b.url).match(/\/spreadsheets\/d\/([a-zA-Z0-9_-]+)/);
+        if (mm) fileId = mm[1];
+      }
+      if (!fileId) return mockErr('請貼該班 Sheet 嘅檔案 ID 或網址');
+      const mreg = mockRegistry();
+      for (const k in mreg) {
+        if (mreg[k].fileId === fileId) return mockErr('該 Sheet 已登記（' + mreg[k].name + '）');
+      }
+      if (/noaccess/i.test(fileId)) {
+        return mockErr('原點帳戶讀唔到呢張 Sheet——請先喺 Drive 將佢分享（編輯者）俾原點帳戶電郵，再登記');
+      }
+      const name = String(b.courseName || '').trim() || '已登記訓練班';
+      const rnd = () => Math.random().toString(36).slice(2, 8);
+      const apiKey = 'ck_reg_' + Date.now().toString(36) + rnd();
+      const meta = {
+        courseId: 'crs_' + rnd(), publicCourseId: 'crs_' + rnd(),
+        name: name, cl: String(b.clName || ''), status: 'active',
+        createdAt: new Date().toISOString(),
+        fileId: fileId, clEmail: String(b.clEmail || ''),
+        url: 'https://docs.google.com/spreadsheets/d/' + fileId, exec: ''
+      };
+      const reg = mockCourses();
+      reg[apiKey] = mockBlankState(name, b, meta);   /* 空白 GS：模版結構就地補齊 */
+      mockSaveCourses(reg);
+      mreg[apiKey] = meta; mockSaveRegistry(mreg);
+      return mockOk({
+        exec: 'mock', apiKey: apiKey,
+        courseId: meta.courseId, publicCourseId: meta.publicCourseId,
+        courseName: name, firstLogin: true, registered: true, url: meta.url,
         directRegUrl: 'https://member-portal-sigma-swart.vercel.app/training?courseId=' + encodeURIComponent(meta.publicCourseId),
       });
     }

@@ -54,7 +54,8 @@ regPage('guide', function (root) {
     ['1️⃣ 新開班', '連線畫面「🆕 新開班」：填課程名・屆別・支部・專章・收生・收費・你個名 → 撳「🏛 連區會起表」。'
       + '系統即刻自動起一張新班 Sheet＋自動登記（照教學模版），你即刻連線入去（首次密碼 1234，入去先改）。'
       + '⚠️ 要向管理層攞「訓練班系統 /exec」（原點 GS 部署出嚟嗰條；開班碼可選）先撳到呢個掣（演示掣唔使）。'
-      + '全程唔使貼 template id／folder id／Script URL／API Key，唔使逐班部署。'],
+      + '全程唔使貼 template id／folder id／Script URL／API Key，唔使逐班部署。想新班 Sheet 自動加你（或其他 CL）做編輯者，可以填「班領導人電郵」。'
+      + '班 Sheet 唔想放喺原點帳戶？第二條路：自己帳戶開空白 GS → 分享（編輯者）俾原點帳戶電郵 → 「📥 我已有 Sheet，登記就得」貼網址登記（結構自動補齊，班內容照常留喺你嗰邊）。'],
     ['2️⃣ 複製網址交區', '起表完會彈「📋 網址」視窗（班 GS 網址），一掣複製，交俾區管理層／貼入區管理系統。'
       + '之後區管理層就連結到你張 GS 睇資料批改（Script 連結＝訓練班系統同一條 /exec）。（儀表板「🚢 掛載流程」隨時可以再攞 URL）'],
     ['3️⃣ 填開班文件', '「📝 開班文件」三個分頁填晒：💰 Input01 預算（8 大開支，有小計）→ 📋 Input02 班資料（名額・節次・截止日・職員表）→ 🗓 時間表（每節 rundown，填「需時」撳⏱自動排時間）。'
@@ -111,6 +112,7 @@ regPage('guide', function (root) {
     ['點解多人會見到同一樣嘢？', '因為同一班職員都用同一組連線資料（訓練班系統 /exec＋該班 API Key＋班密碼）讀同一張班 Sheet。前端每 15 秒同步一次；儲存有 rev 防撞，唔會互相覆蓋。'],
     ['一個人可以睇兩個班嗎？', '可以。首頁可以保存多個班連線：全部經同一個訓練班系統 /exec，後端按每班 API Key 自動讀返對應 Sheet；按「切換訓練班」就揀返要開嗰班。'],
     ['舊制逐班部署嘅班得唔得？', '得。舊班用「🔧 進階／舊班：手動連線」貼該班自己嘅 /exec＋API Key 照舊用；亦可以用後台 importCourse 登記入原點，之後「從登記表選班」都揀到。'],
+    ['班 Sheet 可唔可以唔放喺區會帳戶？', '得，而且好簡單：登記表（原點）只係指針，班 Sheet 可以喺任何帳戶開。自己帳戶開一張空白 Google Sheet → Drive 分享（編輯者）俾「原點帳戶電郵」（即部署訓練班系統嗰個帳戶；App「🆕 新開班 → 我已有 Sheet」有「🔎 查原點電郵」）→ 貼返網址登記。系統驗證讀取權後會就地補齊模版結構（只補缺、唔覆蓋你已有嘅內容）＋自動生成三件套連線資料。全程只係逐個檔案嘅 Drive 分享，冇人要交出帳戶密碼；班內容擁有權永遠留喺你嗰邊。'],
   ].forEach(function (x) {
     faq.appendChild(h('div', { class: 'guide-step' },
       h('div', { class: 'guide-step-title' }, '❓ ' + x[0]),
@@ -123,7 +125,7 @@ regPage('guide', function (root) {
   admin.appendChild(h('div', { class: 'card-title' }, '🏛️ 區管理層／ADC 版重點'));
   admin.appendChild(h('div', { class: 'guide-step' },
     h('div', { class: 'guide-step-body' },
-      '① 訓練班系統原點：開一張 GS → 貼一個檔案（apps-script/CourseHub.gs，見 apps-script/COURSEHUB.md）→ 手動 run 一次 setup()（自動完成訓練班登記等所有設定）→ 部署一次 → 出「訓練班系統 /exec（＋開班碼，可選）」俾 CL；之後每個訓練班自動開一張 Sheet，唔使再部署',
+      '① 訓練班系統原點：用一個專門嘅非機密帳戶開一張 GS → 貼一個檔案（apps-script/CourseHub.gs，見 apps-script/COURSEHUB.md）→ 手動 run 一次 setup()（自動完成訓練班登記等所有設定）→ 部署一次 → 出「訓練班系統 /exec（＋開班碼，可選）」俾 CL；之後每個訓練班自動開一張 Sheet，唔使再部署。登記表只係指針——班 Sheet 可以喺任何帳戶開（「我已有 Sheet，登記就得」），原點只靠逐個檔案 Drive 分享存取，冇人需要交帳戶',
       h('br'),
       '② CL 交嚟嘅 GS＋SCRIPT 網址貼入區管理系統自己分頁 → 自動掛載成員系統',
       h('br'),
