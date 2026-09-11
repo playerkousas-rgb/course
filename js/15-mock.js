@@ -237,9 +237,11 @@ function mockSeedState() {
   return st;
 }
 
-/* ── 空白模版 state（createCourse 用:全部分頁齊、基本資料預填） ── */
-function mockBlankState(nm, b) {
-  b = b || {};
+/* ── 空白模版 state（createCourse 用:全部分頁齊、基本資料預填）
+ *    結構同 apps-script/CourseHub.gs〔一〕模版規格段同源（tests/t_hub.js 對帳） ── */
+function mockBlankState(nm, b, meta) {
+  b = b || {}; meta = meta || {};
+  const pid = meta.publicCourseId || 'demo-course';
   const IN1 = mockGrid(105, 13);
   mockSet(IN1, 1, 2, nm);
   if (b.edition) mockSet(IN1, 4, 2, b.edition);
@@ -278,15 +280,26 @@ function mockBlankState(nm, b) {
   const PARAM = [
     ['區會常數（唔好改名）', ''],
     ['成員系統報名網址', 'https://member-portal-sigma-swart.vercel.app/training'],
-      ['公開課程ID', 'demo-course'],
-      ['成員系統直接報名連結', 'https://member-portal-sigma-swart.vercel.app/training?courseId=demo-course'],
+    ['公開課程ID', pid],
+    ['成員系統直接報名連結', 'https://member-portal-sigma-swart.vercel.app/training?courseId=' + encodeURIComponent(pid)],
     ['FPS 識別碼', '102866183'],
     ['FPS 戶口名稱', 'SCOUT ASSOCIATION OF HONG KONG - SHAU KEI WAN DISTRICT'],
     ['區會網址', 'www.skwscout.org.hk'],
     ['區會批准', ''],
     ['訓練班電郵', ''],
   ];
+  /* 可選：節次（新開班即時填；入班後都可以喺「開班文件」頁改） */
+  if (Array.isArray(b.sessions)) {
+    b.sessions.slice(0, 8).forEach((s, i) => {
+      const r = 9 + i;
+      if (s.date) mockSet(IN2, r, 2, s.date);
+      if (s.time) mockSet(IN2, r, 4, s.time);
+      if (s.venue) mockSet(IN2, r, 5, s.venue);
+      if (s.onNotice) mockSet(IN2, r, 8, true);
+    });
+  }
   const st = { rev: 0, savedAt: '', by: '', sheets: {}, budgetVersions: [] };
+  st.publicCourseId = pid; st.courseTitle = nm;
   st.sheets[TAB.IN1] = IN1; st.sheets[TAB.IN2] = IN2;
   st.sheets[TAB.PARAM] = PARAM;
   st.sheets[TAB.IN3] = IN3; st.sheets[TAB.IN4] = IN4;
@@ -306,6 +319,50 @@ function mockCourses() {
 }
 function mockSaveCourses(reg) {
   try { localStorage.setItem(LS.mockCourses, JSON.stringify(reg)); } catch (e) { /* 忽略 */ }
+}
+/* ── hub 登記表鏡像（對應之源）：apiKey → meta
+ *    meta = { courseId, publicCourseId, name, cl, status, createdAt, url, exec, apiKey? }
+ *    exec 有值＝舊班（獨立部署；模擬 proxy 行為） ── */
+function mockRegistry() {
+  try { return JSON.parse(localStorage.getItem(LS.mockRegistry) || '{}') || {}; } catch (e) { return {}; }
+}
+function mockSaveRegistry(reg) {
+  try { localStorage.setItem(LS.mockRegistry, JSON.stringify(reg)); } catch (e) { /* 忽略 */ }
+}
+function mockKeyByPublicId(pid) {
+  if (String(pid) === 'demo-course') return MOCK_API_KEY;
+  const mreg = mockRegistry();
+  for (const k in mreg) {
+    if (mreg[k].publicCourseId === pid || mreg[k].courseId === pid) return k;
+  }
+  return '';
+}
+function mockDemoMetaRow(withSecret) {
+  return {
+    apiKey: withSecret ? MOCK_API_KEY : '', key: withSecret ? MOCK_API_KEY : '',
+    courseId: 'demo-course', publicCourseId: 'demo-course',
+    name: '演示訓練班（攝影專章）', courseName: '演示訓練班（攝影專章）',
+    url: '', gsUrl: '', exec: '', scriptExecUrl: '',
+    directRegUrl: 'https://member-portal-sigma-swart.vercel.app/training?courseId=demo-course',
+    status: 'active', cl: '陳大文', createdAt: ''
+  };
+}
+function mockMetaRows(withSecret) {
+  const out = [mockDemoMetaRow(withSecret)];
+  const mreg = mockRegistry();
+  Object.keys(mreg).forEach((k) => {
+    const m = mreg[k];
+    out.push({
+      apiKey: withSecret ? (m.apiKey || k) : '', key: withSecret ? (m.apiKey || k) : '',
+      courseId: m.courseId, publicCourseId: m.publicCourseId,
+      name: m.name, courseName: m.name,
+      url: withSecret ? (m.url || '') : '', gsUrl: withSecret ? (m.url || '') : '',
+      exec: m.exec || '', scriptExecUrl: m.exec || '',
+      directRegUrl: 'https://member-portal-sigma-swart.vercel.app/training?courseId=' + encodeURIComponent(m.publicCourseId),
+      status: m.status || 'active', cl: m.cl || '', createdAt: m.createdAt || ''
+    });
+  });
+  return out;
 }
 function mockResolveState(apiKey) {
   const k = String(apiKey || '');
@@ -331,6 +388,10 @@ function mockMigrate(state) {
   if (state.sheets[TAB.RESP] && state.sheets[TAB.RESP][0]) {
     RESP_HEADERS.forEach((h, i) => { if (!state.sheets[TAB.RESP][0][i]) state.sheets[TAB.RESP][0][i] = h; });
   }
+  if (!state.publicCourseId) state.publicCourseId = 'demo-course';
+  if (!state.courseTitle) {
+    state.courseTitle = String(shCell(state.sheets[TAB.IN2], 1, 2) || shCell(state.sheets[TAB.IN1], 1, 2) || '攝影專科徽章訓練班');
+  }
 }
 
 function mockPersist() {
@@ -345,6 +406,7 @@ function mockPersist() {
 function mockReset() {
   MOCK_STATE = mockSeedState(); MOCK_CUR = { key: null, state: null };
   mockSaveCourses({});
+  mockSaveRegistry({});
   mockPersist();
 }
 
@@ -425,72 +487,142 @@ function mockCheckBaseRev(state, baseRev) {
   return null;
 }
 
-/* ── 合約實作 ── */
+/* ── 合約實作（hub 語義：單一 mock /exec＋登記表對應；同 CourseHub.gs） ── */
+/* hub actions：唔使班級 apiKey（入班對應／密碼另驗） */
+const MOCK_HUB_ACTIONS = ['createCourse', 'listCourses', 'connectCourseByPassword', 'adminListCourses', 'adminDeleteCourse', 'hubInfo', 'importCourse'];
+
 const MockAPI = {
   call: async function (action, b) {
     await mockDelay();
-    const isNewCourse = !!(b && b.apiKey && b.apiKey !== MOCK_API_KEY && mockCourses()[b.apiKey]);
-    MOCK_CUR = isNewCourse ? { key: b.apiKey, state: mockCourses()[b.apiKey] } : { key: null, state: null };
+    b = b || {};
+    /* 對應目標班：優先用 apiKey；addReg 可以只帶 publicCourseId（成員系統 direct link） */
+    let rk = String(b.apiKey || '');
+    const rkValid = rk === MOCK_API_KEY || !!mockCourses()[rk];
+    if (!rkValid && action === 'addReg' && b.publicCourseId) rk = mockKeyByPublicId(b.publicCourseId);
+    const isNewCourse = !!(rk && rk !== MOCK_API_KEY && mockCourses()[rk]);
+    MOCK_CUR = isNewCourse ? { key: rk, state: mockCourses()[rk] } : { key: null, state: null };
     const state = isNewCourse ? MOCK_CUR.state : mockLoad();
-    const authFail = mockAuth(b);
-    if (authFail && action !== 'getCourseProfile' && action !== 'createCourse') return authFail;
+    const authFail = mockAuth({ apiKey: rk });
+    if (authFail && action !== 'getCourseProfile' && MOCK_HUB_ACTIONS.indexOf(action) < 0) return authFail;
+    if (action === 'hubInfo') {
+      return mockOk({
+        hubVersion: '6.0.0-mock',
+        templateVersion: (typeof HUB_TEMPLATE_VERSION !== 'undefined') ? HUB_TEMPLATE_VERSION : '1.0.0',
+        setupAt: '', ready: true,
+        courses: { active: mockMetaRows(false).length, archived: 0 }
+      });
+    }
     if (action === 'createCourse') {
-      /* 區級 CourseFactory 合約:CL 起表（copy 模版 → 新 apiKey → 空白模版） */
+      /* CourseHub 合約：新開班＝自動起班＋登記（三件套：內部課程ID／公開課程ID／API Key） */
       const nm = String(b.courseName || '').trim();
       if (!nm) return mockErr('請填課程名稱');
-      const key = 'ck_new_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+      const rnd = () => Math.random().toString(36).slice(2, 8);
+      const apiKey = 'ck_new_' + Date.now().toString(36) + rnd();
+      const meta = {
+        courseId: 'crs_' + rnd(), publicCourseId: 'crs_' + rnd(),
+        name: nm, cl: String(b.clName || ''), status: 'active',
+        createdAt: new Date().toISOString(),
+        url: 'https://docs.google.com/spreadsheets/d/mock-' + Date.now().toString(36), exec: ''
+      };
       const reg = mockCourses();
-      reg[key] = mockBlankState(nm, b);
+      reg[apiKey] = mockBlankState(nm, b, meta);
       mockSaveCourses(reg);
+      const mreg = mockRegistry(); mreg[apiKey] = meta; mockSaveRegistry(mreg);
       return mockOk({
-        exec: 'mock', apiKey: key, courseId: key, courseName: nm, firstLogin: true,
-        url: 'https://docs.google.com/spreadsheets/d/mock-' + Date.now().toString(36),
-        publicCourseId: key, directRegUrl: 'https://member-portal-sigma-swart.vercel.app/training?courseId=' + encodeURIComponent(key),
+        exec: 'mock', apiKey: apiKey,
+        courseId: meta.courseId, publicCourseId: meta.publicCourseId,
+        courseName: nm, firstLogin: true, url: meta.url,
+        directRegUrl: 'https://member-portal-sigma-swart.vercel.app/training?courseId=' + encodeURIComponent(meta.publicCourseId),
       });
+    }
+    if (action === 'importCourse') {
+      /* 舊制班登記入原點（遷移）：保留該班自己嘅 /exec */
+      if (b.adminUser !== 'sheep' || b.adminPassword !== '0728') return mockErr('Unauthorized');
+      const fileId = String(b.fileId || b.courseId || '').trim();
+      if (!fileId) return mockErr('missing fileId');
+      const mreg = mockRegistry();
+      for (const k in mreg) { if (mreg[k].fileId === fileId) return mockErr('該班已登記'); }
+      const apiKey = String(b.apiKey || '') || ('ck_imp_' + Date.now().toString(36));
+      const meta = {
+        courseId: 'crs_imp_' + Date.now().toString(36),
+        publicCourseId: String(b.publicCourseId || '') || ('crs_imp_' + Math.random().toString(36).slice(2, 8)),
+        name: String(b.name || '（未命名舊班）'), cl: String(b.cl || ''), status: 'active',
+        createdAt: new Date().toISOString(),
+        url: 'https://docs.google.com/spreadsheets/d/' + fileId,
+        exec: String(b.scriptExecUrl || b.exec || ''), apiKey: apiKey, fileId: fileId
+      };
+      const reg = mockCourses(); reg[apiKey] = mockBlankState(meta.name, {}, meta); mockSaveCourses(reg);
+      mreg[apiKey] = meta; mockSaveRegistry(mreg);
+      return mockOk({ imported: true, courseId: meta.courseId, publicCourseId: meta.publicCourseId, name: meta.name });
     }
     if (action === 'adminListCourses') {
       if (b.adminUser !== 'sheep' || b.adminPassword !== '0728') return mockErr('Unauthorized');
-      const reg = mockCourses();
-      const courses = Object.keys(reg).map(k => ({ apiKey: k, key: k, exec: 'mock', scriptExecUrl: 'mock', name: String(shCell(reg[k].sheets[TAB.IN2], 1, 2) || shCell(reg[k].sheets[TAB.IN1], 1, 2) || '未命名訓練班'), courseName: String(shCell(reg[k].sheets[TAB.IN2], 1, 2) || shCell(reg[k].sheets[TAB.IN1], 1, 2) || '未命名訓練班'), publicCourseId: k, courseId: k, status: 'active', createdAt: '' }));
-      courses.unshift({ apiKey: MOCK_API_KEY, key: MOCK_API_KEY, exec: 'mock', scriptExecUrl: 'mock', name: '演示訓練班（攝影專章）', courseName: '演示訓練班（攝影專章）', publicCourseId: 'demo-course', courseId: 'demo-course', status: 'active' });
-      return mockOk({ courses: courses });
+      return mockOk({ courses: mockMetaRows(true) });
     }
     if (action === 'adminDeleteCourse') {
       if (b.adminUser !== 'sheep' || b.adminPassword !== '0728') return mockErr('Unauthorized');
       const id = String(b.publicCourseId || b.courseId || b.apiKey || b.key || b.id || '').trim();
       if (id === 'demo-course' || id === MOCK_API_KEY) { mockReset(); return mockOk({ deleted: true, name: '演示訓練班（攝影專章）', trashed: false }); }
-      const reg = mockCourses();
-      if (!reg[id]) return mockErr('找不到該訓練班');
-      const name = String(shCell(reg[id].sheets[TAB.IN2], 1, 2) || shCell(reg[id].sheets[TAB.IN1], 1, 2) || '未命名訓練班');
-      delete reg[id]; mockSaveCourses(reg);
+      const mreg = mockRegistry();
+      let foundKey = '';
+      Object.keys(mreg).some((k) => {
+        const m = mreg[k];
+        if (k === id || m.publicCourseId === id || m.courseId === id) { foundKey = k; return true; }
+        return false;
+      });
+      if (!foundKey) return mockErr('找不到該訓練班');
+      const name = mreg[foundKey].name;
+      delete mreg[foundKey]; mockSaveRegistry(mreg);
+      const reg = mockCourses(); delete reg[foundKey]; mockSaveCourses(reg);
       return mockOk({ deleted: true, name: name, trashed: !!b.trashFile });
     }
     if (action === 'connectCourseByPassword') {
+      /* 職員選班：揀班名→入本班密碼→自動取回連線資料（唔使記 key／URL） */
       const id = String(b.publicCourseId || b.courseId || b.id || '').trim();
+      if (!id) return mockErr('missing courseId');
+      if (!b.password) return mockErr('請輸入本班密碼');
       if (id === 'demo-course' || id === MOCK_API_KEY) {
-        return mockPwAuth(mockLoad(), b).ok ? mockOk({ apiKey: MOCK_API_KEY, key: MOCK_API_KEY, exec: 'mock', scriptExecUrl: 'mock', name: '演示訓練班（攝影專章）', courseName: '演示訓練班（攝影專章）', publicCourseId: 'demo-course', directRegUrl: 'https://member-portal-sigma-swart.vercel.app/training?courseId=demo-course' }) : mockPwAuth(mockLoad(), b);
+        const a = mockPwAuth(mockLoad(), b);
+        if (!a.ok) return a;
+        return mockOk(Object.assign(mockDemoMetaRow(true), { firstLogin: a.data.firstLogin }));
       }
-      const reg = mockCourses();
-      const st0 = reg[id] || null;
+      const mreg = mockRegistry();
+      let key = '';
+      Object.keys(mreg).some((k) => {
+        const m = mreg[k];
+        if (m.publicCourseId === id || m.courseId === id || k === id) { key = k; return true; }
+        return false;
+      });
+      if (!key) return mockErr('找不到該訓練班');
+      const m = mreg[key];
+      const directReg = 'https://member-portal-sigma-swart.vercel.app/training?courseId=' + encodeURIComponent(m.publicCourseId);
+      if (m.exec) {
+        /* 舊班（獨立部署）：模擬 proxy——回該班自己嘅 /exec */
+        const st = mockCourses()[key];
+        if (st) { const a2 = mockPwAuth(st, b); if (!a2.ok) return a2; }
+        return mockOk({
+          apiKey: m.apiKey || key, key: m.apiKey || key,
+          exec: m.exec, scriptExecUrl: m.exec,
+          name: m.name, courseName: m.name,
+          courseId: m.courseId, publicCourseId: m.publicCourseId,
+          url: m.url || '', directRegUrl: directReg, status: m.status || 'active', firstLogin: false
+        });
+      }
+      const st0 = mockCourses()[key];
       if (!st0) return mockErr('找不到該訓練班');
       const a0 = mockPwAuth(st0, b);
       if (!a0.ok) return a0;
-      return mockOk({ apiKey: id, key: id, exec: 'mock', scriptExecUrl: 'mock', name: String(shCell(st0.sheets[TAB.IN2], 1, 2) || shCell(st0.sheets[TAB.IN1], 1, 2) || '未命名訓練班'), courseName: String(shCell(st0.sheets[TAB.IN2], 1, 2) || shCell(st0.sheets[TAB.IN1], 1, 2) || '未命名訓練班'), publicCourseId: id, directRegUrl: 'https://member-portal-sigma-swart.vercel.app/training?courseId=' + encodeURIComponent(id) });
+      return mockOk({
+        apiKey: key, key: key, exec: 'mock', scriptExecUrl: 'mock',
+        name: m.name, courseName: m.name,
+        courseId: m.courseId, publicCourseId: m.publicCourseId,
+        url: m.url || '', gsUrl: m.url || '',
+        directRegUrl: directReg, status: m.status || 'active', firstLogin: a0.data.firstLogin
+      });
     }
     if (action === 'listCourses') {
-      const reg = mockCourses();
-      const courses = Object.keys(reg).map(k => ({
-        apiKey: k, key: k,
-        exec: 'mock', scriptExecUrl: 'mock',
-        name: String(shCell(reg[k].sheets[TAB.IN2], 1, 2) || shCell(reg[k].sheets[TAB.IN1], 1, 2) || '未命名訓練班'),
-        courseName: String(shCell(reg[k].sheets[TAB.IN2], 1, 2) || shCell(reg[k].sheets[TAB.IN1], 1, 2) || '未命名訓練班'),
-        gsUrl: 'https://docs.google.com/spreadsheets/d/mock-' + k,
-        publicCourseId: k,
-        directRegUrl: 'https://member-portal-sigma-swart.vercel.app/training?courseId=' + encodeURIComponent(k),
-        status: 'active'
-      }));
-      courses.unshift({ apiKey: MOCK_API_KEY, key: MOCK_API_KEY, exec: 'mock', scriptExecUrl: 'mock', name: '演示訓練班（攝影專章）', courseName: '演示訓練班（攝影專章）', publicCourseId: 'demo-course', directRegUrl: 'https://member-portal-sigma-swart.vercel.app/training?courseId=demo-course', status: 'active' });
-      return mockOk({ courses: courses });
+      /* hub 語義：冇管理碼＝只回公開資料（班名＋公開課程ID）；攞連線資料要經班密碼 */
+      return mockOk({ courses: mockMetaRows(false) });
     }
     if (action === 'getCourseProfile') {
       /* 連線測試用：唔驗 key 都回基本料（方便手快貼錯都知） */
@@ -596,7 +728,9 @@ const MockAPI = {
       put('出生日期', b.dob || ''); put('所屬童軍區', b.scoutDistrict || '筲箕灣'); put('旅團', b.troop || '');
       put('付款方式', b.payMethod || 'FPS'); put('審批狀態', 'pending');
       put('已繳付訓練班費用截圖', 'https://drive.google.com/file/d/demo-' + encodeURIComponent(b.nameZh) + '/view');
-      put('_ref', ref); put('_courseId', 'demo-course'); put('_courseTitle', '攝影專科徽章訓練班');
+      put('_ref', ref);
+      put('_courseId', state.publicCourseId || 'demo-course');
+      put('_courseTitle', state.courseTitle || '攝影專科徽章訓練班');
       resp.push(row); mockPersist();
       return { ok: true, refCode: ref };
     }
@@ -906,7 +1040,7 @@ const MockDemo = {
     put('付款方式', 'FPS'); put('審批狀態', 'pending');
     put('已繳付訓練班費用截圖', 'https://drive.google.com/file/d/demo-' + encodeURIComponent(p.nameZh) + '/view');
     put('_ref', 'CRS-' + ts.slice(0, 10).replace(/-/g, '') + '-' + Math.floor(Math.random() * 9000 + 1000));
-    put('_courseId', 'demo-course'); put('_courseTitle', '攝影專科徽章訓練班');
+    put('_courseId', state.publicCourseId || 'demo-course'); put('_courseTitle', state.courseTitle || '攝影專科徽章訓練班');
     resp.push(row); h.save();
     return { name: p.nameZh, ts };
   },

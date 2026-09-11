@@ -50,7 +50,7 @@ const Store = {
       existing.directRegUrl = o.directRegUrl || existing.directRegUrl;
       existing.publicCourseId = o.publicCourseId || existing.publicCourseId;
     } else {
-      this.config.courses.push({ id: id, name: o.name || '未命名訓練班', exec: o.exec || '', key: o.key || '', gsUrl: o.gsUrl || '', directRegUrl: o.directRegUrl || '', publicCourseId: o.publicCourseId || '', mock: !!o.mock, fresh: !!o.fresh, savedAt: new Date().toISOString() });
+      this.config.courses.push({ id: id, name: o.name || '未命名訓練班', exec: o.exec || '', key: o.key || '', gsUrl: o.gsUrl || '', directRegUrl: o.directRegUrl || '', publicCourseId: o.publicCourseId || '', via: o.via || '', mock: !!o.mock, fresh: !!o.fresh, savedAt: new Date().toISOString() });
     }
     this.saveConfig();
     return id;

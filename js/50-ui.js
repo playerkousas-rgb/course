@@ -190,10 +190,11 @@ const UI = {
         h('div', { class: 'brand-sub' }, '開班文件 → 通告 → 收生 → 點名收支（一條龍）')),
       h('div', { class: 'card' },
         h('div', { class: 'card-title' }, '🔎 我點樣讀返自己嗰班？'),
-        h('div', { class: 'row-sub' }, '呢個係共用前端，同一個網址可以服務 A/B/C 幾個訓練班。每班真正資料喺自己一張 Google Sheet＋一個 Apps Script。CL 起表後，系統會保存該班 /exec＋API Key 喺本機；其他職員用「複製職員連結」一撳就自動加入同一班。幾班同時進行時，下面「已連線嘅訓練班」揀返要開嗰班就得。')),
+        h('div', { class: 'row-sub' }, '呢個係共用前端，同一個網址可以服務 A/B/C 幾個訓練班。每班真正資料喺自己一張 Google Sheet，全部讀寫經「訓練班系統」單一 /exec（後端用該班 API Key 自動對應返正確班別，唔使逐班部署）。CL 起表後，系統會保存該班連線資料喺本機；其他職員用「複製職員連結」一撳就自動加入同一班。幾班同時進行時，下面「已連線嘅訓練班」揀返要開嗰班就得。')),
       h('div', { class: 'card' },
-        h('div', { class: 'card-title' }, '連線去訓練班工作簿'),
-        h('div', { class: 'field' }, h('label', { class: 'flabel' }, '/exec 網址（Apps Script 網頁應用程式）'), execIn),
+        h('div', { class: 'card-title' }, '🔧 進階／舊班：手動連線'),
+        h('div', { class: 'row-sub' }, '新制班用下面「🆕 新開班／📚 從登記表選班」就得（只填一條訓練班系統 /exec）。呢度俾舊制逐班部署嘅班／已有連線資料嘅職員直接貼。'),
+        h('div', { class: 'field' }, h('label', { class: 'flabel' }, '該班 /exec 網址（Apps Script 網頁應用程式）'), execIn),
         h('div', { class: 'field' }, h('label', { class: 'flabel' }, 'API Key'), keyIn),
         h('div', { class: 'field' }, h('label', { class: 'flabel' }, '顯示名稱（可選）'), nameIn),
         msg,
@@ -202,12 +203,12 @@ const UI = {
           h('button', { class: 'btn', onclick: () => doConnect(true) }, '📊 演示模式'))),
       this.renderNewCourse(),
       savedList,
-      h('div', { class: 'foot-note' }, '共職員密碼預設 1234（進入後可改）・共用前端，資料直接同每班 Google Sheet／Script 對話')));
+        h('div', { class: 'foot-note' }, '共職員密碼預設 1234（進入後可改）・共用前端，全部經訓練班系統單一後端讀寫每班 Google Sheet')));
   },
 
   /* ── 隱藏 CourseFactory 後台：清理開錯班（首頁 Logo 連按 7 下） ── */
   showFactoryAdmin: function () {
-    const fxIn = h('input', { class: 'input', type: 'url', placeholder: 'CourseFactory /exec', value: (Store.config && Store.config.factoryExec) || '' });
+    const fxIn = h('input', { class: 'input', type: 'url', placeholder: '訓練班系統 /exec', value: (Store.config && (Store.config.hubExec || Store.config.factoryExec)) || '' });
     const userIn = h('input', { class: 'input', type: 'text', placeholder: '後台帳號', autocomplete: 'off' });
     const pwIn = h('input', { class: 'input', type: 'password', placeholder: '後台密碼', autocomplete: 'off' });
     const list = h('div', { class: 'card-in' }, h('div', { class: 'row-sub' }, '登入後可刪除開錯嘅訓練班登記；可同時將該 GS 移到 Drive 垃圾桶。'));
@@ -220,7 +221,7 @@ const UI = {
       msg.textContent = '讀取中…'; msg.className = 'form-msg';
       const res = await apiCall('adminListCourses', creds, { exec: fx, key: '' });
       if (!res || !res.ok) { msg.textContent = '登入／讀取失敗：' + ((res && res.error) || '未知錯誤'); msg.className = 'form-msg err'; return; }
-      Store.config.factoryExec = fx; Store.saveConfig();
+      Store.config.hubExec = fx; Store.config.factoryExec = fx; Store.saveConfig();
       const courses = (res.data && res.data.courses) || [];
       list.innerHTML = '';
       if (!courses.length) list.appendChild(h('div', { class: 'row-sub' }, '未有訓練班登記。'));
@@ -241,7 +242,7 @@ const UI = {
       msg.textContent = '已登入'; msg.className = 'form-msg ok';
     }
     const m = modal({ title: '後台清理', wide: true, body: h('div', {},
-      h('div', { class: 'field' }, h('label', { class: 'flabel' }, 'CourseFactory /exec'), fxIn),
+      h('div', { class: 'field' }, h('label', { class: 'flabel' }, '訓練班系統 /exec（原點 GS 單一後端）'), fxIn),
       h('div', { class: 'grid-2c' },
         h('div', { class: 'field' }, h('label', { class: 'flabel' }, '帳號'), userIn),
         h('div', { class: 'field' }, h('label', { class: 'flabel' }, '密碼'), pwIn)),
@@ -257,7 +258,7 @@ const UI = {
     const card = h('div', { class: 'card' });
     card.appendChild(h('div', { class: 'card-title' }, '🆕 新開班（CL 起表）'));
     card.appendChild(h('div', { class: 'row-sub' },
-      '填好基本資料即刻喺區 Drive 起一張新工作簿（照模版）——CL 喺 APP 填晒預算／節次／時間表／通告（全部寫入 GS），複製 GS 網址交區管理系統（SCRIPT 連結觀看批改）；區管理層批好 tick「區會批准」，之後先生成通告交區網頁管理員，上網貼返通告網址就正式掛載成員系統報名。'));
+      '只填課程資料（名稱／班領導人／名額／收費…）即刻自動起一張新班 Sheet＋自動登記——唔使貼 template id／folder id／Script URL／API Key，唔使逐班部署。之後喺 APP 填晒預算／節次／時間表／通告（全部寫入班 GS），複製 GS 網址交區管理系統；區管理層批好 tick「區會批准」，之後先生成通告交區網頁管理員，上網貼返通告網址就正式掛載成員系統報名。'));
 
     const nmIn = h('input', { class: 'input', type: 'text', placeholder: '例：遠足專科徽章訓練班（必填）' });
     const edIn = h('input', { class: 'input', type: 'number', placeholder: '屆別，例：2（可選）' });
@@ -268,8 +269,8 @@ const UI = {
     const intakeIn = h('input', { class: 'input', type: 'number', placeholder: '預計收生人數（可選）' });
     const feeIn = h('input', { class: 'input', type: 'number', placeholder: '預計收費（元，可選）' });
     const clIn = h('input', { class: 'input', type: 'text', placeholder: '班領導人姓名（可選，建議填）' });
-    const factoryIn = h('input', { class: 'input', type: 'url', placeholder: 'https://script.google.com/macros/s/…/exec（區會 CourseFactory 網址）', value: (Store.config.factoryExec || '') });
-    const masterIn = h('input', { class: 'input', type: 'text', placeholder: '管理碼（可選；只用於從登記表直接取回連線資料）', value: (Store.config.factoryKey || '') });
+    const factoryIn = h('input', { class: 'input', type: 'url', placeholder: 'https://script.google.com/macros/s/…/exec（訓練班系統單一後端）', value: ((Store.config && (Store.config.hubExec || Store.config.factoryExec)) || '') });
+    const masterIn = h('input', { class: 'input', type: 'text', placeholder: '開班碼（可選；原點 GS「設定」有設定先要填）', value: (Store.config.factoryKey || '') });
     const msg = h('div', { class: 'form-msg' });
 
     async function doCreate(mockMode) {
@@ -286,8 +287,8 @@ const UI = {
         catch (e) { res = { ok: false, error: '演示後台錯誤：' + (e && e.message) }; }
       } else {
         const fx = factoryIn.value.trim(), mk = masterIn.value.trim();
-        if (!fx) { msg.textContent = '請填區會開班網址（CourseFactory /exec）。'; msg.className = 'form-msg err'; return; }
-        Store.config.factoryExec = fx; Store.config.factoryKey = mk; Store.saveConfig();
+        if (!fx) { msg.textContent = '請填訓練班系統 /exec（原點 GS 部署出嚟嗰條）。'; msg.className = 'form-msg err'; return; }
+        Store.config.hubExec = fx; Store.config.factoryExec = fx; Store.config.factoryKey = mk; Store.saveConfig();
         payload.masterKey = mk;
         res = await apiCall('createCourse', payload, { exec: fx, key: mk });
       }
@@ -297,15 +298,15 @@ const UI = {
         ? Store.addCourse({ mock: true, id: d.apiKey, key: d.apiKey, name: nm, gsUrl: d.url || '', directRegUrl: d.directRegUrl || '', publicCourseId: d.publicCourseId || '', fresh: true })
         : Store.addCourse({ exec: d.exec, key: d.apiKey, name: nm, gsUrl: d.url || '', directRegUrl: d.directRegUrl || '', publicCourseId: d.publicCourseId || '', fresh: true });
       Store.setActive(id);
-      toast('✅ GS 已起「' + nm + '」——首次密碼 1234，入去先改密碼，之後複製 GS 網址交區管理系統批核', 'ok');
+      toast('✅ 新班 Sheet 已自動產生＋登記「' + nm + '」——首次密碼 1234，入去先改密碼，之後複製 GS 網址交區管理系統批核', 'ok');
       UI.render();
       if (d.url) showGsUrlModal(d.url);
     }
 
     async function doPickRegistered(mockMode) {
       const fx = factoryIn.value.trim(), mk = masterIn.value.trim();
-      if (!mockMode && !fx) { msg.textContent = '請填區會開班網址，先可以讀訓練班登記表。'; msg.className = 'form-msg err'; return; }
-      Store.config.factoryExec = fx; Store.config.factoryKey = mk; Store.saveConfig();
+      if (!mockMode && !fx) { msg.textContent = '請填訓練班系統 /exec，先可以讀訓練班登記表。'; msg.className = 'form-msg err'; return; }
+      Store.config.hubExec = fx; Store.config.factoryExec = fx; Store.config.factoryKey = mk; Store.saveConfig();
       msg.textContent = '讀取訓練班登記表中…'; msg.className = 'form-msg';
       const res = mockMode
         ? await MockAPI.call('listCourses', {})
@@ -364,8 +365,8 @@ const UI = {
       h('div', { class: 'field' }, h('label', { class: 'flabel' }, '預計收生人數'), intakeIn),
       h('div', { class: 'field' }, h('label', { class: 'flabel' }, '預計收費（元）'), feeIn),
       h('div', { class: 'field' }, h('label', { class: 'flabel' }, '班領導人姓名'), clIn)));
-    card.appendChild(h('div', { class: 'field' }, h('label', { class: 'flabel' }, '區會開班網址（CourseFactory /exec）——新開班只需填呢個；演示唔使'), factoryIn));
-    card.appendChild(h('div', { class: 'field' }, h('label', { class: 'flabel' }, '管理碼（選已有班才需要；避免公開登記表洩漏 API Key）'), masterIn));
+    card.appendChild(h('div', { class: 'field' }, h('label', { class: 'flabel' }, '訓練班系統 /exec（原點 GS 單一後端）——新開班／選班只需填呢條；演示唔使'), factoryIn));
+    card.appendChild(h('div', { class: 'field' }, h('label', { class: 'flabel' }, '開班碼（可選；原點 GS「設定」有設定先要填。選已有班只需本班密碼，唔會公開 API Key）'), masterIn));
     card.appendChild(msg);
     card.appendChild(h('div', { class: 'btn-row' },
       h('button', { class: 'btn btn-primary', onclick: () => doCreate(true) }, '🚀 起表（演示）'),
