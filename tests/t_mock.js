@@ -68,10 +68,26 @@ async function main() {
   section('addReg（成員系統轉發）');
   const dupe = await MockAPI.call('addReg', { apiKey: KEY, email: 'siuming@example.hk', nameZh: '重覆人', phone: '1', receiptDataUrl: 'data:image/png;base64,x' });
   ok(dupe.ok === false && /重複/.test(dupe.error), '同電郵防重複');
-  const nr = await MockAPI.call('addReg', { apiKey: KEY, email: 'new@example.hk', nameZh: '馮樂瑤', phone: '61000000', receiptDataUrl: 'data:image/png;base64,x', troop: '港島第82旅' });
+  const nr = await MockAPI.call('addReg', {
+    apiKey: KEY, email: 'new@example.hk', nameZh: '馮樂瑤', nameEn: 'Fung Lok Yiu', phone: '61000000',
+    receiptDataUrl: 'data:image/png;base64,x', troop: '港島第82旅', scoutId: '202600001', scoutPosition: '團隊隊員',
+    reason: '曾修畢初階', consentParent: true, gName: '馮太', gRelation: '母親', gPhone: '91230000',
+    consentLeader: '✔', leaderName: '陳大文', leaderTitle: '旅長', payer: '馮太', payAccount: '9527',
+    needReceipt: true, remark: '需要收據抬頭：港島第82旅', formDataUrl: 'data:image/png;base64,y',
+  });
   ok(nr.ok === true && /^CRS-/.test(nr.refCode), '新報名 + refCode');
   const raw4 = await MockAPI.call('getCourseSheetRaw', { apiKey: KEY });
   eq(raw4.data.resp.length, 12, '11 筆報名');
+  const newRow = raw4.data.resp.find(r => r[RC['電郵地址'] - 1] === 'new@example.hk');
+  ok(!!newRow, '新報名喺表入面');
+  eq(newRow[RC['童軍成員編號（ScoutID）'] - 1], '202600001', 'ScoutID 有入');
+  eq(newRow[RC['家長/監護人姓名'] - 1], '馮太', '家長姓名有入');
+  eq(newRow[RC['家長／監護人同意參與有關活動。'] - 1], '✔', '家長同意 → ✔');
+  eq(newRow[RC['所屬童軍旅領袖同意參與有關活動。'] - 1], '✔', '領袖同意 → ✔');
+  eq(newRow[RC['付款人姓名'] - 1], '馮太', '付款人有入');
+  eq(newRow[RC['備註'] - 1], '需要收據抬頭：港島第82旅', '備註有入');
+  eq(newRow[RC['是否需要收據'] - 1], '✔', '需要收據 → ✔');
+  ok(/^https:\/\//.test(newRow[RC['已填妥之表格截圖(上課時需交回正本)'] - 1]) || newRow[RC['已填妥之表格截圖(上課時需交回正本)'] - 1] === 'data:image/png;base64,y', '表格截圖有入');
 
   section('addExpenseRow（append-only）');
   const ex = await MockAPI.call('addExpenseRow', { apiKey: KEY, amounts: { B: 50 }, note: '測試茶點' });

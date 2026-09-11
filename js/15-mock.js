@@ -339,6 +339,14 @@ function mockKeyByPublicId(pid) {
   }
   return '';
 }
+/* 區系統 opsKey 路徑專用：GS 網址入面嘅檔案ID 都可以對應（公開 addReg 唔用呢個） */
+function mockKeyByFileId(fid) {
+  const mreg = mockRegistry();
+  for (const k in mreg) {
+    if (mreg[k].fileId === fid) return k;
+  }
+  return '';
+}
 function mockDemoMetaRow(withSecret) {
   return {
     apiKey: withSecret ? MOCK_API_KEY : '', key: withSecret ? MOCK_API_KEY : '',
@@ -513,7 +521,7 @@ const MockAPI = {
     const viaOps = !rk && b.opsKey === MOCK_OPS_KEY && MOCK_OPS_ACTIONS.indexOf(action) >= 0;
     let rkValid = rk === MOCK_API_KEY || !!mockCourses()[rk];
     if (!rkValid && action === 'addReg' && b.publicCourseId) rk = mockKeyByPublicId(b.publicCourseId);
-    if (!rkValid && viaOps && b.publicCourseId) rk = mockKeyByPublicId(b.publicCourseId);
+    if (!rkValid && viaOps) rk = mockKeyByPublicId(b.publicCourseId) || mockKeyByFileId(b.fileId);
     const isNewCourse = !!(rk && rk !== MOCK_API_KEY && mockCourses()[rk]);
     MOCK_CUR = isNewCourse ? { key: rk, state: mockCourses()[rk] } : { key: null, state: null };
     const state = isNewCourse ? MOCK_CUR.state : mockLoad();
@@ -526,7 +534,7 @@ const MockAPI = {
     }
     if (action === 'hubInfo') {
       return mockOk({
-        hubVersion: '6.2.0-mock',
+        hubVersion: '6.2.1-mock',
         templateVersion: (typeof HUB_TEMPLATE_VERSION !== 'undefined') ? HUB_TEMPLATE_VERSION : '1.0.0',
         setupAt: '', ready: true,
         courses: { active: mockMetaRows(false).length, archived: 0 },
@@ -633,7 +641,7 @@ const MockAPI = {
       /* 區管理系統專用：tick「區會批准」等參數；必須 opsKey（同 CourseHub.gs 合約） */
       if (b.opsKey !== MOCK_OPS_KEY) return mockErr('區系統密匙不正確——setParamLabel 只接受區管理系統呼叫');
       const id = String(b.publicCourseId || b.courseId || b.fileId || '').trim();
-      let key = id ? mockKeyByPublicId(id) : '';
+      let key = id ? (mockKeyByPublicId(id) || mockKeyByFileId(id)) : '';
       if (!key && id && mockRegistry()[id]) key = id;
       const st0 = key === MOCK_API_KEY ? mockLoad() : (mockCourses()[key] || null);
       if (!st0) return mockErr('找不到該訓練班');
@@ -810,12 +818,29 @@ const MockAPI = {
       }
       const ref = 'CRS-' + new Date().toISOString().slice(0, 10).replace(/-/g, '') + '-' + Math.floor(Math.random() * 9000 + 1000);
       const row = new Array(RESP_HEADERS.length).fill('');
-      const put = (h, v) => { row[RC[h] - 1] = v; };
+      const put = (h, v) => { if (RC[h] && v !== undefined && v !== null) row[RC[h] - 1] = v; };
+      const tick = (v) => (v === true || v === 'true' || v === 1 || v === '1' || v === '✔' || v === '是' ? '✔' : (v == null ? '' : String(v)));
+      const shot = (b.receiptDataUrl && b.receiptDataUrl.indexOf('data:') === 0)
+        ? 'https://drive.google.com/file/d/demo-' + encodeURIComponent(b.nameZh) + '/view' : (b.receiptDataUrl || '');
       put('時間戳記', new Date().toISOString()); put('電郵地址', b.email); put('中文姓名', b.nameZh);
       put('英文姓名', b.nameEn || ''); put('聯絡電話', b.phone); put('性別', b.gender || '');
       put('出生日期', b.dob || ''); put('所屬童軍區', b.scoutDistrict || '筲箕灣'); put('旅團', b.troop || '');
-      put('付款方式', b.payMethod || 'FPS'); put('審批狀態', 'pending');
-      put('已繳付訓練班費用截圖', 'https://drive.google.com/file/d/demo-' + encodeURIComponent(b.nameZh) + '/view');
+      put('童軍成員編號（ScoutID）', b.scoutId || ''); put('童軍職位', b.scoutPosition || b.scoutRank || '');
+      put('附加資料(有助訓練班取錄之原因)', b.reason || b.extra || '');
+      put('家長／監護人同意參與有關活動。', tick(b.consentParent));
+      put('家長/監護人姓名', b.gName || b.guardianName || '');
+      put('與申請人關係', b.gRelation || b.guardianRelation || '');
+      put('家長/監護人聯絡電郵', b.gEmail || b.guardianEmail || '');
+      put('家長/監護人聯絡電話', b.gPhone || b.guardianPhone || '');
+      put('所屬童軍旅領袖同意參與有關活動。', tick(b.consentLeader));
+      put('領袖姓名（中文全名）', b.leaderName || ''); put('領袖職位', b.leaderTitle || '');
+      put('領袖聯絡電郵', b.leaderEmail || '');
+      put('付款方式', b.payMethod || 'FPS'); put('付款人姓名', b.payer || b.payerName || ''); put('付款帳戶', b.payAccount || '');
+      put('審批狀態', 'pending');
+      put('已繳付訓練班費用截圖', shot);
+      put('已填妥之表格截圖(上課時需交回正本)', b.formDataUrl || b.formShotDataUrl || b.formScreenshot || '');
+      put('是否需要收據', b.needReceipt ? tick(true) : '');
+      put('備註', b.remark || b.comment || '');
       put('_ref', ref);
       put('_courseId', state.publicCourseId || 'demo-course');
       put('_courseTitle', state.courseTitle || '攝影專科徽章訓練班');

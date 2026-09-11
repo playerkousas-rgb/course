@@ -565,7 +565,7 @@ function hubSetMeta_(ss, key, value) {
  *   - 後備管理員「帳號:密碼」只寫喺下面常數
  *************************************************************/
 
-var HUB_VERSION = '6.2.0';
+var HUB_VERSION = '6.2.1';
 
 /* 後台帳密／區系統密匙：setup() 自動產生，存「設定」分頁（唔再寫死喺 code／repo）。
  * 後台帳號預設 admin；後台密碼 setup 時隨機產生，只顯示一次喺「設定」分頁，
@@ -785,7 +785,7 @@ function hubRequireCourse_(b) {
     if (!row) return { ok: false, error: 'Unauthorized: invalid or missing apiKey' };
   }
 
-  var wanted = String(b.publicCourseId || b.courseId || '').trim();
+  var wanted = String(b.publicCourseId || b.courseId || b.fileId || '').trim();
   if (wanted) {
     var byId = null;
     for (var j = 0; j < rows.length; j++) {
@@ -1519,26 +1519,14 @@ function hcsAddReg_(ss, row, b) {
 
   var ref = 'CRS-' + new Date().toISOString().slice(0, 10).replace(/-/g, '') + '-' + Math.floor(Math.random() * 9000 + 1000);
 
-  /* 入數紙：data: URL 就存入 Drive（best effort）；否則原樣記低 */
-  var receipt = String(b.receiptDataUrl || '');
-  if (receipt.indexOf('data:') === 0) {
-    try {
-      var m = receipt.match(/^data:([^;,]+);base64,(.+)$/);
-      if (m) {
-        var hubMeta = hubMeta_(SpreadsheetApp.getActiveSpreadsheet());
-        var parent = hubMeta['資料夾ID'] ? DriveApp.getFolderById(hubMeta['資料夾ID']) : DriveApp.getRootFolder();
-        var fname = row.name + '_付款證明';
-        var it = parent.getFoldersByName(fname);
-        var folder = it.hasNext() ? it.next() : parent.createFolder(fname);
-        var blob = Utilities.newBlob(Utilities.base64Decode(m[2]), m[1], ref + '.png');
-        receipt = folder.createFile(blob).getUrl();
-      }
-    } catch (e) { /* 上載失敗保留 raw，唔阻報名 */ }
-  }
+  /* 截圖：data: URL 就存入 Drive（best effort）；否則原樣記下。入數紙同表格截圖分資料夾 */
+  var receipt = hubSaveShot_(b.receiptDataUrl, row.name + '_付款證明', ref + '.png');
+  var formShot = hubSaveShot_(b.formDataUrl || b.formShotDataUrl || b.formScreenshot || '', row.name + '_表格截圖', ref + '_form.png');
+  function tick(v) { return (v === true || v === 'true' || v === 1 || v === '1' || v === '✔' || v === '是') ? '✔' : (v == null ? '' : String(v)); }
 
   var width = Math.max(sh.getLastColumn(), 53);
   var out = new Array(width).fill('');
-  function put(h, v) { var c = hmap[h]; if (c) out[c - 1] = v; }
+  function put(h, v) { var c = hmap[h]; if (c && v !== undefined && v !== null) out[c - 1] = v; }
   put('時間戳記', new Date().toISOString());
   put('電郵地址', b.email);
   put('中文姓名', b.nameZh);
@@ -1548,14 +1536,50 @@ function hcsAddReg_(ss, row, b) {
   put('出生日期', b.dob || '');
   put('所屬童軍區', b.scoutDistrict || '筲箕灣');
   put('旅團', b.troop || '');
+  put('童軍成員編號（ScoutID）', b.scoutId || '');
+  put('童軍職位', b.scoutPosition || b.scoutRank || '');
+  put('附加資料(有助訓練班取錄之原因)', b.reason || b.extra || '');
+  put('家長／監護人同意參與有關活動。', tick(b.consentParent));
+  put('家長/監護人姓名', b.gName || b.guardianName || '');
+  put('與申請人關係', b.gRelation || b.guardianRelation || '');
+  put('家長/監護人聯絡電郵', b.gEmail || b.guardianEmail || '');
+  put('家長/監護人聯絡電話', b.gPhone || b.guardianPhone || '');
+  put('所屬童軍旅領袖同意參與有關活動。', tick(b.consentLeader));
+  put('領袖姓名（中文全名）', b.leaderName || '');
+  put('領袖職位', b.leaderTitle || '');
+  put('領袖聯絡電郵', b.leaderEmail || '');
   put('付款方式', b.payMethod || 'FPS');
+  put('付款人姓名', b.payer || b.payerName || '');
+  put('付款帳戶', b.payAccount || '');
   put('審批狀態', 'pending');
   put('已繳付訓練班費用截圖', receipt);
+  put('已填妥之表格截圖(上課時需交回正本)', formShot);
+  put('是否需要收據', b.needReceipt ? tick(true) : '');
+  put('備註', b.remark || b.comment || '');
   put('_ref', ref);
   put('_courseId', row.publicCourseId || '');
   put('_courseTitle', row.name || '');
   sh.appendRow(out);
   return { ok: true, refCode: ref };
+}
+
+/* 報名附帶截圖（入數紙／表格）data:URL → 存入原點「訓練班文件」下以班命名嘅資料夾；失敗原樣／空值保留 */
+function hubSaveShot_(dataUrl, folderName, fileName) {
+  var raw = String(dataUrl || '');
+  if (!raw) return '';
+  if (raw.indexOf('data:') !== 0) return raw;   /* 已經係 Drive URL／其他值：原樣記下 */
+  try {
+    var mm = raw.match(/^data:([^;,]+);base64,(.+)$/);
+    if (!mm) return '';
+    var hubMeta = hubMeta_(SpreadsheetApp.getActiveSpreadsheet());
+    var parent = hubMeta['資料夾ID'] ? DriveApp.getFolderById(hubMeta['資料夾ID']) : DriveApp.getRootFolder();
+    var it = parent.getFoldersByName(folderName);
+    var folder = it.hasNext() ? it.next() : parent.createFolder(folderName);
+    var blob = Utilities.newBlob(Utilities.base64Decode(mm[2]), mm[1], fileName);
+    return folder.createFile(blob).getUrl();
+  } catch (e) {
+    return '';   /* 上載失敗唔阻報名（CL 可聯絡補交） */
+  }
 }
 
 function hcsListRegs_(ss) {

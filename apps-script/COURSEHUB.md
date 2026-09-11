@@ -43,7 +43,7 @@
    > （幂等，唔會覆蓋任何資料），新欄同密匙就會自動補上。舊嘅寫死帳密 `sheep/0728` 喺新版即時失效。
 
 5. **部署 → 部署為網頁應用程式**（執行身分：我自己；存取：**任何人**）→ 攞 `/exec`。
-   呢條就係全系統唯一後端網址（`hubInfo` 可驗證：`GET /exec`；版本應顯示 `6.2.0` 或以上）。
+   呢條就係全系統唯一後端網址（`hubInfo` 可驗證：`GET /exec`；版本應顯示 `6.2.1` 或以上）。
 
 6. 將 `/exec` 派俾 CL、將「**區系統密匙**」交俾區管理系統（貼一次佢就用到所有班）。
    完事——**之後日常唔使再入 Apps Script／張表**。
@@ -61,7 +61,7 @@
 
 ## 擁有權與權限（Sheet 喺邊、點樣交出去）
 
-> 立場：**登記表（原點）只係指針**。四點：
+> 立場：**登記表（原點）只係指針**。五點：
 >
 > 1. **原點 GS 永遠唔放班內容**——「訓練班登記」只存每班的指針（檔案ID／網址／
 >    API Key hash／狀態），班嘅預算／報名／收支全部喺該班 Sheet 本身。
@@ -75,6 +75,12 @@
 >    唔好用任何人的機密個人帳戶做原點——咁样「分享俾原點」係分享俾一個制度帳戶，
 >    唔涉及私人資料。原點帳戶電郵喺 `hubInfo` 嘅 `ownerEmail` 回傳，
 >    前端「查原點電郵」一掣攞到。
+> 5. **唔好淆：原點帳戶電郵 ≠ 訓練班電郵**——原點帳戶電郵（`ownerEmail`）係
+>    **部署訓練班系統 GS 嗰個 Google 帳戶**（＝web app「執行身分：我自己」嘅身分），
+>    成個 hub 以佢執行所有讀寫；只有「CL 自己起 Sheet 再登記」呢條路先要分享俾佢。
+>    「訓練班電郵」就係另一樣嘢：每班「參數」分頁一格（管理層告知 CL 填入），
+>    用喺通告查詢行／`sendRegNotice` 通知書 ReplyTo／`getCourseSummary.courseEmail`，
+>    每班一個、班班可以唔同，同原點帳戶完全無關。
 
 ## 對應規則（單一 /exec 點讀寫正確班別）
 
@@ -106,8 +112,9 @@
 ### v6.2 權限加固（區系統／成員系統對接重點）
 
 - **區系統密匙 `opsKey`**：區管理系統唔使再儲逐班 apiKey——一條 `opsKey`（「設定」分頁，setup
-  自動產生）＋`publicCourseId` 即可呼叫白名單 action：`getCourseProfile`／`getCourseSummary`／
-  `listRegs`／`listBudgetVersions`／`setPaymentCheck`／`setCourseRefund`／`approveBudgetVersion`；
+  自動產生）＋`publicCourseId` 或 CL 提供嘅 GS 網址抽出嚟嘅 `fileId` 即可呼叫白名單 action：
+  `getCourseProfile`／`getCourseSummary`／`listRegs`／`listBudgetVersions`／`setPaymentCheck`／
+  `setCourseRefund`／`approveBudgetVersion`；唔知 ID 可先 call 公開 `listCourses` 用班名對。
   其他 action（改班內容、改密碼等）一律拒絕。`setParamLabel`（tick「區會批准」／寫 FPS 參數）
   **必須**帶 `opsKey`（或舊開班碼 `masterKey`），CL 自己唔可以批准自己班。
 - **成員系統 `addReg` 公開化（write-only）**：只帶 `publicCourseId` 就交得到報名，**唔使 apiKey**；
@@ -118,7 +125,7 @@
   `{ok:false, mustChangePassword:true}`；`auth`／`setPassword`／讀取／`addReg` 例外。
 - **後台帳密搬遷**：由 code 常數改為「設定」分頁（setup 自動產生）；`adminListCourses`
   新增 `data.secrets`（後台登入後先有）——日後交接唔使開張表都可以攞返 `opsKey`／後台密碼。
-- hub 版本號：`hubInfo.hubVersion`＝`6.2.0`（對照 `CourseHub.gs` 嘅 `HUB_VERSION`）。
+- hub 版本號：`hubInfo.hubVersion`＝`6.2.1`（對照 `CourseHub.gs` 嘅 `HUB_VERSION`）。
 
 ## 舊班／舊制相容
 
