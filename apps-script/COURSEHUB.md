@@ -8,6 +8,9 @@
 ## 一次過設定（區管理層／技術同事，約 10 分鐘）
 
 1. **開一張新 Google Sheet**——呢張就係「訓練班系統 GS」（原點）。建議改名叫「訓練班系統」。
+   ⚠️ **建議用專門嘅非機密帳戶**（例如區會「訓練班系統」帳戶）部署原點，唔好用任何人的
+   機密個人帳戶——班 Sheet 嘅擁有權可以留喺各 CL 自己帳戶（見「擁有權與權限」），
+   原點只係登記指針。
 2. **擴充功能 → Apps Script** → 貼入**一個檔案**：`apps-script/CourseHub.gs`
    （單一檔案已包埋：〔一〕模版規格・〔二〕setup・〔三〕路由＋開班＋登記＋選班＋後台・
    〔四〕coursev5 合約：讀寫／收生／批核／通知書／Budget…）。
@@ -43,11 +46,29 @@
 
 | 角色 | 做乜 |
 |---|---|
-| CL | 前端「🆕 新開班」填課程名／班領導人／名額／收費／屆別／支部／專章 → 新班 Sheet 自動產生＋自動登記 → 即刻入班（首次密碼 1234）→ 喺 APP 填預算／節次／時間表／通告 |
+| CL | 前端「🆕 新開班」填課程名／班領導人／班領導人電郵（選填）／名額／收費／屆別／支部／專章 → 新班 Sheet 自動產生＋自動登記（並自動 `addEditor` 班領導人）→ 即刻入班（首次密碼 1234）→ 喺 APP 填預算／節次／時間表／通告。另有第二條路：**自己帳戶開 Sheet 再登記**（見「擁有權與權限」） |
+| CL（自己起表） | 「📥 我已有 Sheet，登記就得」：喺任何帳戶開空白 GS → Drive 分享（編輯者）俾原點帳戶電郵 → 貼網址登記 → 系統驗證、就地補齊模版結構（只補缺、唔覆蓋）＋生成三件套 |
 | 班職員 | 「📚 從登記表選班」揀班名 → 輸入本班密碼 → 自動取回連線資料（唔使記 key／URL） |
 | 區管理層 | `getCourseSummary` 批核；批好 tick 班 GS 參數「區會批准」；財務用 `setPaymentCheck`／`setCourseRefund`；Budget 用 `approveBudgetVersion` |
 | 成員系統 | 通告 direct link（帶 `publicCourseId`）→ `addReg` 經同一個 /exec 寫入正確班 |
 | 開錯班 | 首頁 Logo 連按 7 下 → 後台清理（帳密只寫喺 `CourseHub.gs` 常數） |
+
+## 擁有權與權限（Sheet 喺邊、點樣交出去）
+
+> 立場：**登記表（原點）只係指針**。四點：
+>
+> 1. **原點 GS 永遠唔放班內容**——「訓練班登記」只存每班的指針（檔案ID／網址／
+>    API Key hash／狀態），班嘅預算／報名／收支全部喺該班 Sheet 本身。
+> 2. **班 Sheet 可以喺任何帳戶開**：`createCourse` 自動起嘅班放喺原點帳戶嘅
+>    「訓練班文件」資料夾（方便區會統一管理）；`registerCourse` 就係為「唔想放喺
+>    原點帳戶」而設——CL 自己帳戶開空白 GS，登記後一切照用（結構自動補齊）。
+> 3. **權限只靠逐個檔案嘅 Drive 分享（編輯者）俾原點帳戶電郵**——GAS 要 `openById`
+>    讀寫該班，呢個權限係必須；但冇人需要交出帳戶密碼／轉移擁有權。
+>    未分享就登記 → hub 回「原點帳戶讀唔到呢張 Sheet」提示。
+> 4. **建議用一個專門嘅非機密帳戶部署原點**（例如「訓練班系統」帳戶），
+>    唔好用任何人的機密個人帳戶做原點——咁样「分享俾原點」係分享俾一個制度帳戶，
+>    唔涉及私人資料。原點帳戶電郵喺 `hubInfo` 嘅 `ownerEmail` 回傳，
+>    前端「查原點電郵」一掣攞到。
 
 ## 對應規則（單一 /exec 點讀寫正確班別）
 
@@ -67,7 +88,13 @@
 - 新制班嘅「Script URL」全部＝同一條 hub `/exec`；區管理系統 CourseLinks 靠
   `publicCourseId` 對應（登記表自動有）。
 - 新增：`hubInfo`（診斷）、`importCourse`（舊班登記入原點，後台帳密）。
-- `createCourse` 回傳 `exec`＝hub /exec；新增可選 `sessions`（節次預填）。
+- `createCourse` 回傳 `exec`＝hub /exec；可選 `sessions`（節次預填）；
+  可選 `clEmail`（班領導人電郵）→ 新班 Sheet 自動 `addEditor` 佢（區管理電郵 `opsEmail` 自動分享已有）。
+- **新增 `registerCourse`**：登記 CL（或任何人有）嘅現有空白 GS——入參
+  `url`／`fileId`＋`courseName?`／`clName?`／`clEmail?`／基本資料；hub 驗證讀取權、
+  `hubRepairTemplate_` 就地補模版（只補缺、唔覆蓋）、生成三件套＋登記指針；
+  回傳同 `createCourse` 再加 `registered:true`。重複登記同一檔案＝拒絕。
+- `hubInfo` 回傳 `ownerEmail`（原點帳戶電郵）——CL 登記自己 Sheet 前照佢分享（編輯者）。
 - `listCourses` 冇開班碼時只回公開資料（班名＋公開課程ID）——同舊制一致。
 
 ## 舊班／舊制相容
@@ -87,3 +114,5 @@
 | 模版要改版面 | 改 `CourseHub.gs`〔一〕模版規格段 → run `setupTemplate()`（只會補缺，唔會覆蓋已有班） |
 | 班職員忘記密碼 | 後備管理員喺密碼格輸入「帳號:密碼」（常數喺 CourseHub.gs）→ 設定頁改密碼 |
 | 要重設某班密碼 | 刪 `_Auth` 分頁該班行嘅「密碼hash」格 → 該班回復 1234＋firstLogin |
+| `registerCourse` 話「原點帳戶讀唔到呢張 Sheet」 | 未分享／分享唔啱級別：喺 Drive 將該班 Sheet **分享（編輯者）**俾原點帳戶電郵（`hubInfo.ownerEmail`；前端「🔎 查原點電郵」）再重新登記 |
+| 登記話「該 Sheet 已登記」 | 同一張 Sheet 只能登記一次；去「📚 從登記表選班」用該班名＋密碼入就得（或後台 `adminDeleteCourse` 刪指針後重新登記） |

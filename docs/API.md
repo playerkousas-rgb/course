@@ -22,9 +22,13 @@
 - 每個 course action：`apiKey` hash → 登記表行 → `SpreadsheetApp.openById(fileId)`；
   可另帶 `publicCourseId`／`courseId` 覆核（同 key 唔對應即拒絕）
 - 每班密碼存原點隱藏 `_Auth` 分頁（冇行＝首次 1234）；錯 5 次鎖 10 分鐘（按班獨立）
-- 明文 API Key 只出現喺 `createCourse` 回應（一次）＋ `_Auth`（「從登記表選班」憑班密碼取回）
+- 明文 API Key 只出現喺 `createCourse`／`registerCourse` 回應（一次）＋ `_Auth`（「從登記表選班」憑班密碼取回）
 - 每班 Sheet 由 hub `createCourse` 自動 `makeCopy` 模版產生＋登記；模版由 `setup()`
   照 `CourseHub.gs`〔一〕模版規格段自動起——**人手零貼 ID、零逐班部署**
+- **登記表只係指針**：班 Sheet 可喺任何帳戶開——`registerCourse` 登記現有／自己帳戶嘅
+  空白 GS（驗證可讀 → `hubRepairTemplate_` 就地補齊結構，只補缺唔覆蓋 → 產三件套＋寫指針）。
+  原點帳戶對班 Sheet 嘅存取只靠**逐個檔案 Drive 分享（編輯者）**，冇人需要交出帳戶；
+  建議原點用專門嘅非機密帳戶部署（電郵喺 `hubInfo.ownerEmail` 回傳）
 - 舊班行（登記表有自己 `/exec`）：course actions 唔經 hub，前端照舊直連該班 /exec；
   `connectCourseByPassword` 會 proxy 去該班驗證
 
@@ -43,8 +47,9 @@
 | `getCourseSheetRaw` | — | `{input01,input02,input03,input04,resp,paramsWX,notice,attend,accept,finance,completion,cert,subsidy,pulledAt,rev,revSavedAt,revBy}` | 主同步（15 秒輪詢）；rev 供樂觀鎖；`attend`（Print_學員出席紀錄）係 coursev5 加嘅 dump |
 | `getCourseProfile` | — | 課程結構資料 | 連線測試＋解鎖頁職員名單 |
 | `getCourseSummary` | — | 見下「getCourseSummary 精簡批核 view」 | **區管理系統批核用**（`apps-script/Summary.gs`）：管理層只睇最重要嘅資料——一個 call 攞齊課程資料・節次・職員・預算 8 大類・通告要點（檔案編號/訓練班電郵）・批准狀態・報名數，減省行政時間。純讀、唔 bump rev |
-| `createCourse` | `masterKey`(開班碼,可選),`courseName`,`edition?,section?,badge?,intake?,fee?,clName?,clTitle?,sessions?` | `{exec,apiKey,courseId,publicCourseId,directRegUrl,courseName,firstLogin,url}` | **CourseHub**（新制）／舊制 CourseFactory：CL 新開班**即刻自動起班 Sheet＋登記**——`makeCopy` 模版＋預填 Input01/02（`sessions` 可選預填節次）＋產三件套（內部課程ID／公開課程ID／API Key）＋回傳 GS `url` 交區;APP 即刻連線。新制回傳 `exec`＝hub /exec（所有班共用） |
-| `hubInfo` | — | `{hubVersion,templateVersion,setupAt,ready,courses{active,archived}}` | **CourseHub**：診斷（GET /exec 亦回同樣資料）；前端／區系統確認原點已 setup |
+| `createCourse` | `masterKey`(開班碼,可選),`courseName`,`edition?,section?,badge?,intake?,fee?,clName?,clTitle?,clEmail?,sessions?` | `{exec,apiKey,courseId,publicCourseId,directRegUrl,courseName,firstLogin,url}` | **CourseHub**（新制）／舊制 CourseFactory：CL 新開班**即刻自動起班 Sheet＋登記**——`makeCopy` 模版＋預填 Input01/02（`sessions` 可選預填節次）＋產三件套（內部課程ID／公開課程ID／API Key）＋回傳 GS `url` 交區;APP 即刻連線。新制回傳 `exec`＝hub /exec（所有班共用）。選填 `clEmail`＝新班 Sheet 自動 `addEditor` 班領導人（區管理電郵 `opsEmail` 自動分享已有） |
+| `registerCourse` | `masterKey?(開班碼),url 或 fileId,`＋`courseName?,clName?,clTitle?,clEmail?,edition?,section?,badge?,intake?,fee?,sessions?` | `{exec,apiKey,courseId,publicCourseId,directRegUrl,courseName,url,firstLogin,registered:true}` | **CourseHub**：登記「已經存在」嘅班 Sheet（任何帳戶開得都得）——從 `url` 抽檔案ID→驗證原點可讀（唔得即報「原點帳戶讀唔到…請先分享（編輯者）」）→就地補齊模版結構（只補缺、唔覆蓋既有內容）→產三件套＋登記表寫指針。班內容擁有權留喺原帳戶，冇人需要交帳戶 |
+| `hubInfo` | — | `{hubVersion,templateVersion,setupAt,ready,courses{active,archived},ownerEmail}` | **CourseHub**：診斷（GET /exec 亦回同樣資料）；前端／區系統確認原點已 setup；`ownerEmail`＝原點帳戶電郵（CL 登記自己嘅 Sheet 前照佢分享） |
 | `importCourse` | `adminUser,adminPassword,fileId,apiKey?,scriptExecUrl?,name?,publicCourseId?` | `{imported,courseId,publicCourseId,name}` | **CourseHub 後台**：舊制班登記入原點（保留該班自己 /exec；選班時 proxy 驗證） |
 | `setRegStatus` | `id`(=時間戳記),`status`(pending/approved/rejected/cancelled),`reviewer` | `{saved,id,status}` | 收生：接納/拒絕/取消。**唔檢查 rev、唔 bump rev**（identity 定位，安全） |
 | `saveCourseBatch` | `cells[{tab,row,col,value}]`,`baseRev`,`by` | `{saved,rev,savedAt,updated,skippedTabs}` | 批次寫格（開班文件／通告／分組） |
@@ -98,7 +103,7 @@
 - `_Sync` 隱藏分頁：A1 rev／B1 savedAt／C1 by
 - `setCourseCells`／`setCompletionRow`／`setCertRow`／`saveCourseBatch`（有 cells/completion/cert）→ **驗 baseRev＋bump rev**
 - `setRegStatus`／`addReg`／`addExpenseRow` → **唔驗唔 bump**（append／identity 性質）
-- `createCourse` → 驗**開班碼**（masterKey，唔係逐班 apiKey）；新班 rev 由 0 開始
+- `createCourse`／`registerCourse` → 驗**開班碼**（masterKey，唔係逐班 apiKey）；新班／登記班 rev 由 0 開始；重複登記同一檔案＝拒絕
 - baseRev 唔帶＝照寫（舊部署相容）
 - 衝突回 `{ok:false,conflict:true,…}`——今次乜都冇寫入
 

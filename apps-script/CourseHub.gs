@@ -512,7 +512,7 @@ function hubSetMeta_(ss, key, value) {
  *
  * ── 兩類 action ──
  * Hub actions（唔使班別對應）：
- *   hubInfo／createCourse／listCourses／connectCourseByPassword／
+ *   hubInfo／createCourse／registerCourse／listCourses／connectCourseByPassword／
  *   setParamLabel／adminListCourses／adminDeleteCourse／importCourse
  * Course actions（coursev5 合約，回應格式零改變；逐一對應到班）：
  *   getCourseSheetRaw／getCourseProfile／getCourseSummary／saveCourseBatch／
@@ -529,7 +529,7 @@ function hubSetMeta_(ss, key, value) {
  *   - 後備管理員「帳號:密碼」只寫喺下面常數
  *************************************************************/
 
-var HUB_VERSION = '6.0.0';
+var HUB_VERSION = '6.1.0';
 
 var HUB_ADMIN_USER = 'sheep';   /* 後台清理／後備管理員（只寫喺呢度） */
 var HUB_ADMIN_PW = '0728';
@@ -568,6 +568,7 @@ function doPost(e) {
     /* hub actions */
     if (a === 'hubInfo') return hubJsonOut_(hubInfo(b));
     if (a === 'createCourse') return hubJsonOut_(hubCreateCourse_(b));
+    if (a === 'registerCourse') return hubJsonOut_(hubRegisterCourse_(b));
     if (a === 'listCourses') return hubJsonOut_(hubListCourses_(b));
     if (a === 'connectCourseByPassword') return hubJsonOut_(hubConnectByPassword_(b));
     if (a === 'setParamLabel') return hubJsonOut_(hubSetParamLabel_(b));
@@ -591,6 +592,8 @@ function hubInfo(b) {
   rows.forEach(function (r) {
     if (r.status === 'archived' || r.status === 'completed') archived++; else active++;
   });
+  var ownerEmail = '';
+  try { ownerEmail = String(Session.getEffectiveUser().getEmail() || ''); } catch (e) { /* 攞唔到都唔阻診斷 */ }
   return {
     ok: true,
     data: {
@@ -598,7 +601,8 @@ function hubInfo(b) {
       templateVersion: meta['模版版本'] || HUB_TEMPLATE_VERSION,
       setupAt: meta['setupAt'] || '',
       ready: !!(meta['模版檔案ID'] && meta['資料夾ID']),
-      courses: { active: active, archived: archived }
+      courses: { active: active, archived: archived },
+      ownerEmail: ownerEmail   /* 原點帳戶電郵：CL「我已有 Sheet」登記前先分享（編輯者）俾呢個電郵 */
     }
   };
 }
@@ -816,10 +820,11 @@ function hubCreateCourse_(b) {
     return { ok: false, error: '未完成 setup()（欠缺模版／資料夾）——請喺 Apps Script 編輯器手動 run 一次 setup' };
   }
 
-  /* 1. copy 模版（makeCopy 零漂移） */
+  /* 1. copy 模版（makeCopy 零漂移）；分享：區管理＋（選填）班領導人 */
   var folder = DriveApp.getFolderById(meta['資料夾ID']);
   var file = DriveApp.getFileById(tplId).makeCopy(nm + '（開班文件）', folder);
   if (cfg.opsEmail) { try { file.addEditor(cfg.opsEmail); } catch (e) { /* 唔阻開班 */ } }
+  if (b.clEmail) { try { file.addEditor(String(b.clEmail).trim()); } catch (e2) { /* 唔阻開班 */ } }
   var cs = SpreadsheetApp.openById(file.getId());
 
   /* 2. 產生三件套：內部課程ID／公開課程ID／API Key */
@@ -830,41 +835,73 @@ function hubCreateCourse_(b) {
     ? cfg.memberPortalUrl + (cfg.memberPortalUrl.indexOf('?') >= 0 ? '&' : '?') + 'courseId=' + encodeURIComponent(publicCourseId)
     : '';
 
-  /* 3. 預填 CL 喺 APP 填嘅基本資料（座標同舊 CourseFactory 完全一致） */
+  /* 3. 預填班 GS（同 registerCourse 共用；座標同舊 CourseFactory 完全一致） */
+  hubPrefillCourse_(cs, cfg, b, publicCourseId, directRegUrl);
+
+  /* 4. 登記＋_Auth（明文 key 只存隱藏保護分頁；登記表存 hash） */
+  hubAppendRegistry_(ss, {
+    courseId: courseId, publicCourseId: publicCourseId, name: nm,
+    keyHash: hubSha256_(apiKey), fileId: file.getId(), url: file.getUrl(),
+    exec: '', status: 'active', cl: String(b.clName || ''),
+    createdAt: new Date().toISOString()
+  });
+  hubAuthSave_(ss, courseId, { apiKey: apiKey });
+
+  /* 5. 回傳：前端即刻連線（首次密碼 1234） */
+  return {
+    ok: true,
+    data: {
+      exec: hubExecUrl_(), apiKey: apiKey,
+      courseId: courseId, publicCourseId: publicCourseId,
+      directRegUrl: directRegUrl, courseName: nm,
+      url: file.getUrl(), firstLogin: true
+    }
+  };
+}
+
+/* 預填班 GS 基本資料＋參數分頁（createCourse／registerCourse 共用）。
+ * fillGapsOnly=true（登記自己帳戶嘅既有 Sheet 用）：已有內容嘅格一律保留，只填空格。 */
+function hubPrefillCourse_(cs, cfg, b, publicCourseId, directRegUrl, fillGapsOnly) {
+  var nm = String(b.courseName || '').trim();
+  var put = function (sh, r, c, v) {
+    if (v == null || String(v) === '') return;
+    if (fillGapsOnly && String(sh.getRange(r, c).getValue() || '') !== '') return;
+    sh.getRange(r, c).setValue(v);
+  };
   var in1 = cs.getSheetByName('Input01 訓練班預算');
   if (in1) {
-    in1.getRange('B1').setValue(nm);
-    if (b.edition) in1.getRange('B4').setValue(Number(b.edition) || b.edition);
-    if (b.section) in1.getRange('B5').setValue(b.section);
-    if (b.badge) in1.getRange('B6').setValue(b.badge);
-    in1.getRange('B8').setValue('訓練班');
-    if (b.intake) in1.getRange('B11').setValue(Number(b.intake) || 0);
-    if (b.fee) in1.getRange('B12').setValue(Number(b.fee) || 0);
+    put(in1, 1, 2, nm);
+    if (b.edition) put(in1, 4, 2, Number(b.edition) || b.edition);
+    if (b.section) put(in1, 5, 2, b.section);
+    if (b.badge) put(in1, 6, 2, b.badge);
+    put(in1, 8, 2, '訓練班');
+    if (b.intake) put(in1, 11, 2, Number(b.intake) || 0);
+    if (b.fee) put(in1, 12, 2, Number(b.fee) || 0);
   }
   var in2 = cs.getSheetByName('Input02 訓練班資料');
   if (in2) {
-    in2.getRange('B1').setValue(nm);
-    if (b.intake) in2.getRange('B4').setValue(Number(b.intake) || 0);
-    if (b.fee) in2.getRange('B5').setValue(Number(b.fee) || 0);
+    put(in2, 1, 2, nm);
+    if (b.intake) put(in2, 4, 2, Number(b.intake) || 0);
+    if (b.fee) put(in2, 5, 2, Number(b.fee) || 0);
     if (b.clName) {
-      in2.getRange('A23').setValue('班領導人');
-      in2.getRange('B23').setValue(b.clName);
-      if (b.clTitle) in2.getRange('C23').setValue(b.clTitle);
+      put(in2, 23, 1, '班領導人');
+      put(in2, 23, 2, b.clName);
+      if (b.clTitle) put(in2, 23, 3, b.clTitle);
     }
     /* 可選：節次（新開班即時填；唔填就入班後喺「開班文件」頁填） */
     if (Array.isArray(b.sessions)) {
       for (var i = 0; i < Math.min(b.sessions.length, 8); i++) {
         var s = b.sessions[i] || {};
         var r = 9 + i;
-        if (s.date) in2.getRange(r, 2).setValue(s.date);
-        if (s.time) in2.getRange(r, 4).setValue(s.time);
-        if (s.venue) in2.getRange(r, 5).setValue(s.venue);
-        if (s.onNotice) in2.getRange(r, 8).setValue(true);
+        if (s.date) put(in2, r, 2, s.date);
+        if (s.time) put(in2, r, 4, s.time);
+        if (s.venue) put(in2, r, 5, s.venue);
+        if (s.onNotice) put(in2, r, 8, true);
       }
     }
   }
 
-  /* 4. 參數分頁（區會批准格＋公開課程ID＋區會常數） */
+  /* 參數分頁（區會常數＋公開課程ID；登記模式一律以 hub 三件套為準） */
   var param = cs.getSheetByName('參數') || cs.insertSheet('參數');
   var seeds = [
     ['成員系統報名網址', cfg.memberPortalUrl || ''],
@@ -877,26 +914,58 @@ function hubCreateCourse_(b) {
     ['訓練班電郵', '']
   ];
   seeds.forEach(function (p) { hubSetParamCell_(param, p[0], p[1]); });
+}
 
-  /* 5. 登記＋_Auth（明文 key 只存隱藏保護分頁；登記表存 hash） */
+/* ══════════ Hub action：registerCourse（登記表只係指針；Sheet 喺邊個帳戶開都得）══════════
+ * CL 自己帳戶開一張空白 GS → Drive 分享（編輯者）俾原點帳戶電郵（hubInfo.ownerEmail）
+ * → 喺 App 貼網址登記。hub 驗證可讀後就地補齊模版結構（只補缺、唔覆蓋既有內容）
+ * ＋生成三件套＋登記指針。班內容擁有權永遠留喺 CL 嗰邊；原點唔存班內容。 */
+
+function hubRegisterCourse_(b) {
+  b = b || {};
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var cfg = hubConfig_(ss);
+  if (cfg.keyHash && hubSha256_(b.masterKey || '') !== cfg.keyHash) {
+    return { ok: false, error: '開班授權碼不正確——請同區管理層確認' };
+  }
+  var fileId = String(b.fileId || '').trim();
+  if (!fileId && b.url) {
+    var m = String(b.url).match(/\/spreadsheets\/d\/([a-zA-Z0-9_-]+)/);
+    if (m) fileId = m[1];
+  }
+  if (!fileId) return { ok: false, error: '請貼該班 Sheet 嘅檔案 ID 或網址' };
+  if (fileId === ss.getId()) return { ok: false, error: '呢張係原點「訓練班系統 GS」——登記表唔使登記做班' };
+  var rows = hubRegistryRows_(ss);
+  for (var i = 0; i < rows.length; i++) {
+    if (rows[i].fileId === fileId) return { ok: false, error: '該 Sheet 已登記（' + rows[i].name + '）' };
+  }
+  var cs;
+  try { cs = SpreadsheetApp.openById(fileId); }
+  catch (e) {
+    return { ok: false, error: '原點帳戶讀唔到呢張 Sheet——請先喺 Drive 將佢分享（編輯者）俾原點帳戶電郵，再登記' };
+  }
+  hubRepairTemplate_(cs);  /* 就地補齊模版結構：只補缺、唔覆蓋已有內容 */
+  var name = String(b.courseName || '').trim() || String(cs.getName() || '').replace(/（開班文件）$/, '') || '已登記訓練班';
+  var courseId = hubId_('crs_');
+  var publicCourseId = hubId_('crs_');
+  var apiKey = 'ck_' + Utilities.getUuid().replace(/-/g, '').slice(0, 20);
+  var directRegUrl = cfg.memberPortalUrl
+    ? cfg.memberPortalUrl + (cfg.memberPortalUrl.indexOf('?') >= 0 ? '&' : '?') + 'courseId=' + encodeURIComponent(publicCourseId)
+    : '';
+  b.courseName = name;
+  hubPrefillCourse_(cs, cfg, b, publicCourseId, directRegUrl, true);
+  if (b.clEmail) { try { cs.addEditor(String(b.clEmail).trim()); } catch (e2) { /* 唔阻登記 */ } }
   hubAppendRegistry_(ss, {
-    courseId: courseId, publicCourseId: publicCourseId, name: nm,
-    keyHash: hubSha256_(apiKey), fileId: file.getId(), url: file.getUrl(),
-    exec: '', status: 'active', cl: String(b.clName || ''),
-    createdAt: new Date().toISOString()
+    courseId: courseId, publicCourseId: publicCourseId, name: name, cl: String(b.clName || ''),
+    keyHash: hubSha256_(apiKey), fileId: fileId, url: cs.getUrl(),
+    exec: '', status: 'active', createdAt: new Date().toISOString()
   });
   hubAuthSave_(ss, courseId, { apiKey: apiKey });
-
-  /* 6. 回傳：前端即刻連線（首次密碼 1234） */
-  return {
-    ok: true,
-    data: {
-      exec: hubExecUrl_(), apiKey: apiKey,
-      courseId: courseId, publicCourseId: publicCourseId,
-      directRegUrl: directRegUrl, courseName: nm,
-      url: file.getUrl(), firstLogin: true
-    }
-  };
+  return { ok: true, data: {
+    exec: hubExecUrl_(), apiKey: apiKey, courseId: courseId, publicCourseId: publicCourseId,
+    directRegUrl: directRegUrl, courseName: name, url: cs.getUrl(),
+    firstLogin: true, registered: true
+  } };
 }
 
 function hubSetParamCell_(param, label, value) {
